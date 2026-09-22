@@ -116,7 +116,7 @@
   .pace-bar { position:relative; height:10px; background:rgba(255,255,255,.06); border-radius:99px; margin-bottom:24px; box-shadow:inset 0 1px 2px rgba(0,0,0,.3); }
   .pace-fill { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--grow-deep), var(--grow)); border-radius:99px; transition:width .8s cubic-bezier(.22,1,.36,1), background .4s; box-shadow:0 0 12px rgba(61,220,138,.35); }
   .pace-marker { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--text); border-radius:2px; transition:left .8s cubic-bezier(.22,1,.36,1); box-shadow:0 0 6px rgba(255,255,255,.4); }
-  .pace-marker::after { content:"attendu"; position:absolute; bottom:-17px; left:50%; transform:translateX(-50%); font-size:9.5px; color:var(--muted); white-space:nowrap; letter-spacing:.02em; }
+  .pace-marker::after { content:attr(data-lbl); position:absolute; bottom:-17px; left:50%; transform:translateX(-50%); font-size:9.5px; color:var(--muted); white-space:nowrap; letter-spacing:.02em; }
 
   .action { margin:20px 0 6px; }
   .log-btn { position:relative; width:100%; border:1px solid rgba(255,255,255,.18); background:linear-gradient(180deg, #45e494, #2fb673); color:#052414;
@@ -657,7 +657,7 @@ async function logSession(){
   if(hit){ save(); showToast(hit===100?T('tGoalReached'):(hit+' % '+T('tMilestone'))); }
   else { showToast('+'+fr(m.perSession,2)+' %  '+T('tRecorded')); }
   pulseRing();
-  pushProgress(); scheduleSync();
+  await pushProgress(); scheduleSync();
 }
 async function undoLast(){
   const o=active(); const today=isoDate(new Date()); let idx=-1;
@@ -736,7 +736,7 @@ function renderFreq(o){
     </div></div>
     <div class="pace">
       <div class="pace-top"><span class="pace-label">${T('pace')}</span><span class="pace-status" style="color:${pColor}">${pText}</span></div>
-      <div class="pace-bar"><div class="pace-fill" style="width:${Math.min(m.pct,100).toFixed(1)}%; background:${fColor}"></div><div class="pace-marker" style="left:${Math.min(m.expectedPct,100).toFixed(1)}%"></div></div>
+      <div class="pace-bar"><div class="pace-fill" style="width:${Math.min(m.pct,100).toFixed(1)}%; background:${fColor}"></div><div class="pace-marker" data-lbl="${T('expected')}" style="left:${Math.min(m.expectedPct,100).toFixed(1)}%"></div></div>
     </div>
     <div class="action">
       <button class="log-btn" id="log">${escapeHtml(tAction(o))}</button>
@@ -768,8 +768,9 @@ function renderFreq(o){
 function avgGauge(o){
   const need=(o.weeklyTarget&&o.weeklyTarget>0)?Number(o.weeklyTarget):(o.target/Math.max(1,(parseDate(o.endDate)-parseDate(o.startDate))/6048e5));
   const all=weekBuckets(o,80);
-  const startMon=mondayOf(parseDate(o.startDate));
-  const past=all.filter(b=>b.mon>=startMon && b.mon<mondayOf(new Date()));
+  const startDay=parseDate(o.startDate);
+  // on ne compte que les semaines ENTIERES commencees apres le depart
+  const past=all.filter(b=>b.mon>=startDay && b.mon<mondayOf(new Date()));
   const recent=past.slice(-8);
   if(recent.length===0){
     return `<div class="avg stat"><div class="avg-top"><span class="avg-title">${T('avgTitle')}</span><span class="avg-val">—</span></div>
