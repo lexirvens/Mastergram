@@ -437,7 +437,9 @@ const I18N={
   statusTitle:"Statuts du jour",statusPh:"Ta séance en un mot, ou une citation",
   statusPost:"Publier",statusNone:"Aucun statut pour l'instant. Sois le premier.",
   statusSession:"Séance",statusQuote:"Citation",statusExpire:"Disparaît après 24 h",
-  liveOn:"En direct",groupSettings:"Réglages du groupe et règles",pagesPerDay:"Pages par jour visées",pagesHint:"Sert à calculer ton objectif de lecture.",pagesTotal:"pages au total",
+  liveOn:"En direct",groupSettings:"Réglages du groupe et règles",
+  syncTitle:"Synchronisation",syncHint:"Renvoie ta progression réelle au groupe.",forceSync:"Forcer la synchro",
+  syncing:"Envoi...",syncOk:"Progression synchronisée",syncFail:"Échec de la synchro :",pagesPerDay:"Pages par jour visées",pagesHint:"Sert à calculer ton objectif de lecture.",pagesTotal:"pages au total",
   photo:"Photo",addPhoto:"Ajouter une photo",removePhoto:"Retirer",
   myPhoto:"Ma photo de profil",changePhoto:"Changer ma photo",
   lastSeen:"Vu",now:"à l'instant",minAgo:"il y a %d min",hAgo:"il y a %d h",dAgo:"il y a %d j",online:"en ligne",
@@ -513,7 +515,9 @@ const I18N={
   statusTitle:"Today's statuses",statusPh:"Your session in a word, or a quote",
   statusPost:"Post",statusNone:"No status yet. Be the first.",
   statusSession:"Session",statusQuote:"Quote",statusExpire:"Disappears after 24 h",
-  liveOn:"Live",groupSettings:"Group settings and rules",pagesPerDay:"Target pages per day",pagesHint:"Used to compute your reading goal.",pagesTotal:"pages total",
+  liveOn:"Live",groupSettings:"Group settings and rules",
+  syncTitle:"Sync",syncHint:"Send your real progress to the group again.",forceSync:"Force sync",
+  syncing:"Sending...",syncOk:"Progress synced",syncFail:"Sync failed:",pagesPerDay:"Target pages per day",pagesHint:"Used to compute your reading goal.",pagesTotal:"pages total",
   photo:"Photo",addPhoto:"Add a photo",removePhoto:"Remove",
   myPhoto:"My profile photo",changePhoto:"Change my photo",
   lastSeen:"Seen",now:"just now",minAgo:"%d min ago",hAgo:"%d h ago",dAgo:"%d d ago",online:"online",
@@ -1192,9 +1196,33 @@ async function pushProgress(){
   const m=freqMetrics(o);
   const freqs=state.objectives.filter(x=>x.type==='frequency');
   const detail={objectives:freqs.map(f=>({id:f.id,key:f.key||null,name:f.name,renamed:!!f.renamed,itemKey:f.itemKey||'session',actionKey:f.actionKey||'generic',startDate:f.startDate,endDate:f.endDate,target:f.target,weeklyTarget:f.weeklyTarget,weekOverrides:f.weekOverrides||{},sessions:f.sessions||[],reached:f.reached||[]}))};
-  const row={ user_id:me.id, group_id:myGroup.id, goal_name:tName(o), pct:Number(m.pct.toFixed(2)), done:m.done, target:m.target,
-    week_count:curWeek(o), week_target:wkTargetFor(o,mondayOf(new Date())), streak:weekStreak(o), detail:detail, updated_at:new Date().toISOString() };
-  try{ await sb.from('progress').upsert(row,{onConflict:'user_id,group_id'}); }catch(e){}
+  const wt=Number(wkTargetFor(o,mondayOf(new Date())))||1;
+  const row={ user_id:me.id, group_id:myGroup.id, goal_name:tName(o), pct:Number(m.pct.toFixed(2)),
+    done:Math.round(m.done), target:Math.round(m.target),
+    week_count:Math.round(curWeek(o)), week_target:Math.round(wt), week_target_exact:Number(wt),
+    streak:Math.round(weekStreak(o)), detail:detail, updated_at:new Date().toISOString() };
+  try{
+    const {error}=await sb.from('progress').upsert(row,{onConflict:'user_id,group_id'});
+    if(error) throw error;
+    lastSyncError=null; return true;
+  }catch(e){
+    // 2e tentative sans les colonnes recentes, au cas ou la base ne les a pas encore
+    try{
+      const slim={...row}; delete slim.detail; delete slim.week_target_exact;
+      const {error:e2}=await sb.from('progress').upsert(slim,{onConflict:'user_id,group_id'});
+      if(e2) throw e2;
+      lastSyncError=null; return true;
+    }catch(e2){
+      lastSyncError=(e2&&e2.message)||(e&&e.message)||'erreur inconnue';
+      return false;
+    }
+  }
+}
+async function forceSync(){
+  showToast(T('syncing'));
+  const ok=await pushProgress();
+  await loadGroup(); render();
+  showToast(ok?T('syncOk'):(T('syncFail')+' '+(lastSyncError||'')));
 }
 
 async function doAuth(){
@@ -1485,6 +1513,7 @@ function openViewer(url,who,isVid){
 function closeViewer(){ const v=document.getElementById('viewer'); if(!v) return; clearInterval(window.__vT); v.classList.remove('open'); const im=v.querySelector('#v-img'); if(im) im.src=''; const vd=v.querySelector('#v-vid'); if(vd){ vd.pause(); vd.src=''; } }
 
 /* ---- Statuts 24h ---- */
+let lastSyncError=null;
 let statuses=[], stKind='session', rtChan=null, liveOn=false, stMedia=null, stMediaUrl=null, stMediaType=null;
 async function loadStatuses(){
   if(!sb||!me||!myGroup) return;
@@ -1686,6 +1715,10 @@ function renderGroupe(){
     <div class="g-card"><h3>${T('changePseudo')}</h3>
       <div class="field"><input id="ps-input" type="text" value="${escapeAttr(myProfile?myProfile.pseudo:'')}"></div>
       <button class="save-btn" id="ps-save">${T('save')}</button></div>
+    <div class="g-card"><h3>${T('syncTitle')}</h3>
+      <p>${T('syncHint')}</p>
+      ${lastSyncError?`<div class="note" style="color:var(--behind)">${escapeHtml(lastSyncError)}</div>`:''}
+      <button class="save-btn" id="g-force">${T('forceSync')}</button></div>
     <div class="rulecard"><h4>${T('rules')}</h4><ul><li>${T('rule1')}</li><li>${T('rule2')}</li></ul><div class="foot">${T('ruleFoot')}</div></div>
   </details>`;
   html+=`<button class="share-btn" id="g-refresh">${T('refreshGroup')}</button>
@@ -1708,6 +1741,7 @@ function wireGroupe(){
   on('g-create',createGroup);
   on('g-join',joinGroup);
   on('g-refresh',refreshGroup);
+  on('g-force',forceSync);
   on('ps-save',savePseudo);
   on('st-post',postStatus);
   on('sk-session',()=>{ stKind='session'; render(); });
