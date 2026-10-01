@@ -1278,7 +1278,15 @@ async function sendComment(targetId){
   try{ await sb.from('comments').insert({group_id:myGroup.id,author_id:me.id,target_id:targetId,body});
     el.value=''; await loadGroup(); render(); }catch(e){ showToast(T('tSendFail')); }
 }
-async function refreshGroup(){ showToast(T('tRefreshing')); await loadGroup(); render(); }
+async function refreshGroup(){
+  showToast(T('tRefreshing'));
+  let ok=true;
+  try{ ok=await pushProgress(); }catch(e){ ok=false; }
+  try{ await pushData(); }catch(e){}
+  try{ await loadStatuses(); }catch(e){}
+  await loadGroup(); render();
+  showToast(ok?T('syncOk'):(T('syncFail')+' '+(lastSyncError||'')));
+}
 
 function initials(n){ return (n||'?').trim().slice(0,2).toUpperCase(); }
 function hueFor(id){ let h=0; for(let i=0;i<(id||'').length;i++) h=(h*31+id.charCodeAt(i))%360; return h; }
