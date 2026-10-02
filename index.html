@@ -348,6 +348,34 @@
   .foldbox[open] summary::after { content:'▴'; }
   .foldbox > *:not(summary) { margin-left:12px; margin-right:12px; }
   .foldbox > *:last-child { margin-bottom:14px; }
+
+  .streak { font-family:'Space Grotesk',sans-serif; font-weight:600; }
+  .stk-1 { color:var(--grow); }
+  .stk-2 { color:var(--gold); }
+  .stk-3 { color:#4aa8ff; }
+  .stk-4 { color:#b07cff; }
+  .stk-5 { color:#ff7ab0; }
+  .stk-6 { color:#ff9640; }
+  .stk-7 { color:#19e0c8; }
+
+  .hub { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; margin:0 0 20px; padding:15px 18px; border-radius:18px; cursor:pointer;
+    background:linear-gradient(135deg, rgba(61,220,138,.18), rgba(43,127,201,.14)); border:1px solid rgba(61,220,138,.34);
+    -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass); box-shadow:var(--shadow); }
+  .hub.on { background:linear-gradient(135deg, rgba(61,220,138,.3), rgba(43,127,201,.22)); border-color:rgba(61,220,138,.6); }
+  .hub-l { display:flex; align-items:center; gap:11px; min-width:0; }
+  .hub-t { font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:700; letter-spacing:-.01em; }
+  .hub-s { font-size:11.5px; color:var(--muted); margin-top:1px; }
+  .hub-r { display:flex; align-items:center; gap:7px; flex:none; }
+  .hub-dot { width:8px; height:8px; border-radius:50%; background:var(--grow); animation:pulse 2s infinite; }
+  .rank { width:30px; height:30px; border-radius:50%; flex:none; display:grid; place-items:center; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:13px; color:#06210f; background:var(--line-strong); }
+  .rank.r1 { background:linear-gradient(145deg,#ffd978,#e0a81c); }
+  .rank.r2 { background:linear-gradient(145deg,#e4e8ee,#a7b0bd); }
+  .rank.r3 { background:linear-gradient(145deg,#f0b183,#c0763c); }
+  .mate.lead { border-color:rgba(242,193,78,.45); box-shadow:var(--shadow), 0 0 0 1px rgba(242,193,78,.18); }
+  .gapline { font-size:11.5px; color:var(--soft); margin-top:7px; }
+  .sugg { margin-top:22px; text-align:center; }
+  .sugg button { background:none; border:none; color:var(--soft); font-size:12.5px; text-decoration:underline; cursor:pointer; padding:8px; }
+  .sugg button:hover { color:var(--grow); }
   @media (prefers-reduced-motion:reduce) { *, .overlay.open, .sheet { animation:none !important; transition:none !important; } }
 
   </style>
@@ -430,6 +458,9 @@ const I18N={
   swearText:"<b>Sur l'honneur.</b> Ajoute une séance seulement si tu es certain de l'avoir faite. Si tu n'es pas sûr, assume le fait d'avoir oublié.",
   swearConfirm:"Je jure sur l'honneur avoir vraiment fait cette séance.",
   catchNone:"Aucun jour à rattraper.",done:"Terminé",
+  catchOpen:"Ouvrir tout l'historique (nouveau membre)",catchClose:"Revenir à 8 jours",
+  catchOpenAsk:"Ouvrir le rattrapage depuis le début du défi ? À n'utiliser que pour un nouveau membre qui s'entraînait déjà. Sur l'honneur.",
+  catchClosed:"Rattrapage limité à 8 jours",
   group:"Groupe",add:"Ajouter",scrollRight:"Faire défiler vers la droite",
   rules:"Règle du groupe",rule1:"15 minutes à la salle suffisent pour compter la journée.",
   rule2:"À la maison, il faut au moins 100 push ups pour compter la journée.",
@@ -438,6 +469,9 @@ const I18N={
   statusPost:"Publier",statusNone:"Aucun statut pour l'instant. Sois le premier.",
   statusSession:"Séance",statusQuote:"Citation",statusExpire:"Disparaît après 24 h",
   liveOn:"En direct",groupSettings:"Réglages du groupe et règles",
+  arena:"L'arène",arenaSub:"Votre classement et vos statuts",rankYou:"Tu es",
+  behindLeader:"Retard sur le 1er :",leading:"En tête du groupe",
+  suggest:"Suggérer une amélioration",suggestPrompt:"Ton idée pour améliorer l'app :",suggestOk:"Merci, suggestion envoyée",
   syncTitle:"Synchronisation",syncHint:"Renvoie ta progression réelle au groupe.",forceSync:"Forcer la synchro",
   syncing:"Envoi...",syncOk:"Progression synchronisée",syncFail:"Échec de la synchro :",pagesPerDay:"Pages par jour visées",pagesHint:"Sert à calculer ton objectif de lecture.",pagesTotal:"pages au total",
   photo:"Photo",addPhoto:"Ajouter une photo",removePhoto:"Retirer",
@@ -508,6 +542,9 @@ const I18N={
   swearText:"<b>On your honour.</b> Only add a session if you are certain you did it. If you are not sure, accept that you forgot.",
   swearConfirm:"I swear on my honour I really did this session.",
   catchNone:"Nothing to catch up on.",done:"Done",
+  catchOpen:"Open full history (new member)",catchClose:"Back to 8 days",
+  catchOpenAsk:"Open catch-up back to the start of the challenge? Only for a new member who was already training. On your honour.",
+  catchClosed:"Catch-up limited to 8 days",
   group:"Group",add:"Add",scrollRight:"Scroll right",
   rules:"Group rule",rule1:"15 minutes at the gym is enough to count the day.",
   rule2:"At home, at least 100 push-ups to count the day.",
@@ -516,6 +553,9 @@ const I18N={
   statusPost:"Post",statusNone:"No status yet. Be the first.",
   statusSession:"Session",statusQuote:"Quote",statusExpire:"Disappears after 24 h",
   liveOn:"Live",groupSettings:"Group settings and rules",
+  arena:"The arena",arenaSub:"Your ranking and statuses",rankYou:"You are",
+  behindLeader:"Behind the leader by",leading:"Leading the group",
+  suggest:"Suggest an improvement",suggestPrompt:"Your idea to improve the app:",suggestOk:"Thanks, suggestion sent",
   syncTitle:"Sync",syncHint:"Send your real progress to the group again.",forceSync:"Force sync",
   syncing:"Sending...",syncOk:"Progress synced",syncFail:"Sync failed:",pagesPerDay:"Target pages per day",pagesHint:"Used to compute your reading goal.",pagesTotal:"pages total",
   photo:"Photo",addPhoto:"Add a photo",removePhoto:"Remove",
@@ -633,7 +673,16 @@ function freqMetrics(o){
   const daysLeft=Math.max(0,Math.ceil((e-now)/864e5));
   return {target,done,perSession,pct,expectedPct:timeFrac*100,daysLeft,remaining:Math.max(0,target-done)};
 }
-function wkTargetFor(o,monday){ if(o.weekOverrides){ const k=isoDate(mondayOf(monday)); if(o.weekOverrides[k]!=null) return o.weekOverrides[k]; } return Math.max(1,o.weeklyTarget||1); }
+function wkTargetFor(o,monday){
+  if(o.weekOverrides){ const k=isoDate(mondayOf(monday)); if(o.weekOverrides[k]!=null) return Math.max(1,Math.round(o.weekOverrides[k])); }
+  // moyenne decimale (ex 4,5) => semaines alternees entieres : 5, 4, 5, 4...
+  const avg=Math.max(0.5,Number(o.weeklyTarget)||1);
+  const lo=Math.floor(avg), hi=Math.ceil(avg);
+  if(lo===hi) return Math.max(1,lo);
+  const start=mondayOf(parseDate(o.startDate));
+  const idx=Math.max(0,Math.round((mondayOf(monday)-start)/6048e5));
+  return Math.max(1, idx%2===0 ? hi : lo);
+}
 function weekBuckets(o,n){ const out=[]; const m=mondayOf(new Date()); for(let i=n-1;i>=0;i--){ const s=new Date(m); s.setDate(s.getDate()-i*7); const e=new Date(s); e.setDate(e.getDate()+7); const c=o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; out.push({count:c,label:s.getDate()+'/'+(s.getMonth()+1),mon:new Date(s)});} return out; }
 function monthBuckets(o,n){ const out=[]; const b=new Date(); b.setDate(1); b.setHours(0,0,0,0); for(let i=n-1;i>=0;i--){ const s=new Date(b.getFullYear(),b.getMonth()-i,1); const e=new Date(b.getFullYear(),b.getMonth()-i+1,1); const c=o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; out.push({count:c,label:MOISg()[s.getMonth()].replace('.','')});} return out; }
 function curWeek(o){ const s=mondayOf(new Date()); const e=new Date(s); e.setDate(e.getDate()+7); return o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; }
@@ -685,9 +734,14 @@ function render(){
   const o=active(); const app=document.getElementById('app');
   let tabs='<div class="tabs-wrap"><div class="tabs" id="tabs-scroll">';
   state.objectives.forEach(ob=>{ tabs+=`<button class="tab ${(view3==='objectifs'&&ob.id===state.activeId)?'active':''}" data-tab="${ob.id}">${escapeHtml(tName(ob))}</button>`; });
-  tabs+=`<button class="tab ${view3==='groupe'?'active':''}" id="tab-groupe">${T('group')}</button>`;
   tabs+=`<button class="tab add" id="tab-add">+ ${T('add')}</button></div>`;
   tabs+=`<button class="tabs-arrow" id="tabs-arrow" aria-label="${T('scrollRight')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button></div>`;
+  const myRank=(me&&mates.length)?(mates.findIndex(x=>x.id===me.id)+1):0;
+  tabs+=`<button class="hub ${view3==='groupe'?'on':''}" id="tab-groupe">
+    <span class="hub-l"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span><span class="hub-t">${myGroup?escapeHtml(myGroup.name):T('arena')}</span><span class="hub-s">${(myRank&&mates.length>1)?(T('rankYou')+' '+myRank+'/'+mates.length):T('arenaSub')}</span></span></span>
+    <span class="hub-r">${liveOn?'<span class="hub-dot"></span>':''}<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+  </button>`;
 
   let sub = (view3==='groupe') ? renderGroupe() : (o.type==='frequency' ? renderFreq(o) : renderWeight(o));
 
@@ -750,7 +804,7 @@ function renderFreq(o){
     <div class="subgoal">
       <div class="subgoal-top"><span class="subgoal-title">${T('thisWeek')}</span><span class="wk-ctrl"><button class="wk-step" id="wk-dec" aria-label="Diminuer l'objectif de la semaine">−</button><span class="subgoal-count num ${wkDone?'done':''}"><b>${cw}</b> / ${wt}</span><button class="wk-step" id="wk-inc" aria-label="Augmenter l'objectif de la semaine">+</button></span></div>
       <div class="mini-bar"><div class="mini-fill" style="width:${wkPct}%; background:${wkDone?'var(--gold)':'var(--grow)'}"></div></div>
-      <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak">${streak} ${T('weeksRow')}</span>`:'<span></span>'}</div>
+      <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak stk-${((streak-1)%7)+1}">${streak} ${T('weeksRow')}</span>`:'<span></span>'}</div>
     </div>
     ${avgGauge(o)}
     <div class="stats">
@@ -1218,6 +1272,16 @@ async function pushProgress(){
     }
   }
 }
+
+async function sendSuggestion(){
+  const txt=prompt(T('suggestPrompt'));
+  if(!txt||!txt.trim()) return;
+  try{
+    const {error}=await sb.from('suggestions').insert({group_id:myGroup?myGroup.id:null,author_id:me.id,body:txt.trim()});
+    if(error) throw error;
+    showToast(T('suggestOk'));
+  }catch(e){ showToast(T('tSendFail')); }
+}
 async function forceSync(){
   showToast(T('syncing'));
   const ok=await pushProgress();
@@ -1314,7 +1378,8 @@ function missedDays(o){
   const out=[]; const today=new Date(); today.setHours(0,0,0,0);
   const start=parseDate(o.startDate);
   const counts={}; o.sessions.forEach(x=>{ const k=dayKey(x.ts); counts[k]=(counts[k]||0)+1; });
-  for(let i=1;i<=CATCHUP_DAYS;i++){
+  const span=o.catchupOpen?Math.min(200,Math.max(1,Math.round((today-start)/86400000))):CATCHUP_DAYS;
+  for(let i=1;i<=span;i++){
     const d=new Date(today); d.setDate(d.getDate()-i);
     if(d<start) break;
     out.push({ date:new Date(d), key:isoDate(d), count:counts[isoDate(d)]||0 });
@@ -1342,8 +1407,13 @@ function openCatchup(){
     <p class="hint">${T('catchHint')}</p>
     <div class="swear">${T('swearText')}</div>
     ${rows||`<div class="empty">${T('catchNone')}</div>`}
+    ${o.catchupOpen?`<button class="alt-btn" id="cu-lock">${T('catchClose')}</button>`:`<button class="alt-btn" id="cu-open">${T('catchOpen')}</button>`}
     <button class="save-btn" id="cu-close">${T('done')}</button>`;
   document.getElementById('cu-close').onclick=()=>{ closeSheet(); render(); };
+  const cuo=document.getElementById('cu-open');
+  if(cuo) cuo.onclick=async()=>{ if(confirm(T('catchOpenAsk'))){ o.catchupOpen=true; await save(); openCatchup(); } };
+  const cul=document.getElementById('cu-lock');
+  if(cul) cul.onclick=async()=>{ o.catchupOpen=false; await save(); openCatchup(); showToast(T('catchClosed')); };
   document.querySelectorAll('[data-add]').forEach(b=>{ b.onclick=()=>{
     if(confirm(T('swearConfirm'))) addPastSession(b.dataset.add);
   }; });
@@ -1690,15 +1760,18 @@ function renderGroupe(){
   mates.forEach(mt=>{
     const p=mt.prog; const pct=p?Number(p.pct):0; const hue=hueFor(mt.id);
     const isMe=mt.id===me.id; const col=`hsl(${hue} 65% 58%)`;
-    html+=`<div class="mate">
+    const rk=mates.indexOf(mt)+1;
+    const lead=mates[0]; const gap=(lead&&lead!==mt&&lead.prog)?(Number(lead.prog.pct)-pct):0;
+    html+=`<div class="mate ${rk===1&&mates.length>1?'lead':''}">
       <div class="mate-top">
-        <div class="mate-id"><div class="avatar" style="background:${col}">${mt.avatar?`<img src="${mt.avatar}">`:initials(mt.pseudo)}</div>
+        <div class="mate-id">${mates.length>1?`<div class="rank r${rk<=3?rk:''}">${rk}</div>`:''}<div class="avatar" style="background:${col}">${mt.avatar?`<img src="${mt.avatar}">`:initials(mt.pseudo)}</div>
           <div><div class="mate-name">${escapeHtml(mt.pseudo)}${isMe?(' ('+T('you')+')'):''}</div><div class="mate-goal">${p?escapeHtml(p.goal_name||''):T('noData')}</div><div class="seen">${seenLabel(mt.last_seen)}</div></div></div>
         <div class="mate-pct" style="color:${col}">${p?fr(pct,1):'—'}<span style="font-size:13px;color:var(--muted)">%</span></div>
       </div>
       <div class="mate-bar"><div class="mate-fill" style="width:${Math.min(100,pct).toFixed(1)}%; background:${col}"></div></div>
       <div class="mate-foot"><span>${p?p.done+' / '+p.target:''}</span><span>${p?T('weekLbl')+' : '+p.week_count+'/'+p.week_target+(p.streak>0?(' · '+p.streak+' '+(LANG==='en'?'wks':'sem.')):''):''}</span></div>
-      <div class="mate-act"><button class="chip" data-detail="${mt.id}">${LANG==='en'?'Details':'Détails'}</button><button class="chip" data-enc="${mt.id}" data-name="${escapeAttr(mt.pseudo)}">${T('encourage')}</button><button class="chip" data-cmt="${mt.id}">${T('commentsL')}</button></div>
+      ${(mates.length>1&&gap>0.01)?`<div class="gapline">${T('behindLeader')} ${fr(gap,2)} %</div>`:((rk===1&&mates.length>1&&p)?`<div class="gapline" style="color:var(--gold)">${T('leading')}</div>`:'')}
+      <div class="mate-act"><button class="chip" data-detail="${mt.id}">${LANG==='en'?'Details':'Détails'}</button><button class="chip" data-enc="${mt.id}" data-name="${escapeAttr(mt.pseudo)}">${T('encourage')}</button><button class="chip" data-cmt="${mt.id}">${T('commentsL')}${(()=>{const n=comments.filter(c=>c.target_id===mt.id).length; return n?(' · '+n):'';})()}</button></div>
     </div>`;
     if(openMate===mt.id){
       const list=comments.filter(c=>c.target_id===mt.id);
@@ -1713,6 +1786,7 @@ function renderGroupe(){
   // 2. STATUTS
   html+=renderStatuses();
   // 3. Réglages repliés en bas
+  html+=`<div class="sugg"><button id="g-sugg">${T('suggest')}</button></div>`;
   html+=`<details class="foldbox"><summary>${T('groupSettings')}</summary>
     <div class="g-card" style="margin-top:12px"><h3>${escapeHtml(myGroup.name)}</h3><p>${T('shareCode')}</p>
       <div class="g-code" id="g-copy">${escapeHtml(myGroup.code)}</div>
@@ -1750,6 +1824,7 @@ function wireGroupe(){
   on('g-join',joinGroup);
   on('g-refresh',refreshGroup);
   on('g-force',forceSync);
+  on('g-sugg',sendSuggestion);
   on('ps-save',savePseudo);
   on('st-post',postStatus);
   on('sk-session',()=>{ stKind='session'; render(); });
@@ -1778,7 +1853,7 @@ function wireGroupe(){
   const ci=document.getElementById('cmt-input'); if(ci) ci.onkeydown=(e)=>{ if(e.key==='Enter') sendComment(openMate); };
 }
 
-function formatPct(p){ if(p===0) return '0'; if(p>=100) return p.toFixed(0); return fr(p,1); }
+function formatPct(p){ const d=(p>0&&p<10)?2:1; return fr(p,d); }
 function fmtDate(d){ return d.getDate()+' '+MOISg()[d.getMonth()]+' '+d.getFullYear(); }
 function fmtDayHead(d){ const today=new Date(); today.setHours(0,0,0,0); const y=new Date(today); y.setDate(y.getDate()-1); const dd=new Date(d); dd.setHours(0,0,0,0);
   if(dd.getTime()===today.getTime()) return T('today'); if(dd.getTime()===y.getTime()) return T('yesterday');
