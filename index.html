@@ -487,13 +487,13 @@ const I18N={
   confirmDelete:"Supprimer cet objectif et toutes ses données ?",
   theme:"Apparence",dark:"Sombre",lightM:"Clair",autoM:"Auto",autoHint:"Auto : sombre de 20h à 6h, clair le reste du temps.",
   catchUp:"Rattraper un oubli",catchTitle:"Rattraper un oubli",
-  catchHint:"Tu peux ajouter une séance oubliée dans les 8 derniers jours.",
+  catchHint:"Tu peux ajouter une séance oubliée dans les 9 derniers jours.",
   swearText:"<b>Sur l'honneur.</b> Ajoute une séance seulement si tu es certain de l'avoir faite. Si tu n'es pas sûr, assume le fait d'avoir oublié.",
   swearConfirm:"Je jure sur l'honneur avoir vraiment fait cette séance.",
   catchNone:"Aucun jour à rattraper.",done:"Terminé",
-  catchOpen:"Ouvrir tout l'historique (nouveau membre)",catchClose:"Revenir à 8 jours",
+  catchOpen:"Ouvrir tout l'historique (nouveau membre)",catchClose:"Revenir à 9 jours",
   catchOpenAsk:"Ouvrir le rattrapage depuis le début du défi ? À n'utiliser que pour un nouveau membre qui s'entraînait déjà. Sur l'honneur.",
-  catchClosed:"Rattrapage limité à 8 jours",
+  catchClosed:"Rattrapage limité à 9 jours",
   group:"Groupe",add:"Ajouter",scrollRight:"Faire défiler vers la droite",
   rules:"Règle du groupe",rule1:"15 minutes à la salle suffisent pour compter la journée.",
   rule2:"À la maison, il faut au moins 100 push ups pour compter la journée.",
@@ -571,13 +571,13 @@ const I18N={
   confirmDelete:"Delete this goal and all its data?",
   theme:"Appearance",dark:"Dark",lightM:"Light",autoM:"Auto",autoHint:"Auto: dark from 8pm to 6am, light the rest of the day.",
   catchUp:"Fix a missed log",catchTitle:"Fix a missed log",
-  catchHint:"You can add a forgotten session from the last 8 days.",
+  catchHint:"You can add a forgotten session from the last 9 days.",
   swearText:"<b>On your honour.</b> Only add a session if you are certain you did it. If you are not sure, accept that you forgot.",
   swearConfirm:"I swear on my honour I really did this session.",
   catchNone:"Nothing to catch up on.",done:"Done",
-  catchOpen:"Open full history (new member)",catchClose:"Back to 8 days",
+  catchOpen:"Open full history (new member)",catchClose:"Back to 9 days",
   catchOpenAsk:"Open catch-up back to the start of the challenge? Only for a new member who was already training. On your honour.",
-  catchClosed:"Catch-up limited to 8 days",
+  catchClosed:"Catch-up limited to 9 days",
   group:"Group",add:"Add",scrollRight:"Scroll right",
   rules:"Group rule",rule1:"15 minutes at the gym is enough to count the day.",
   rule2:"At home, at least 100 push-ups to count the day.",
@@ -1404,8 +1404,8 @@ function applyTheme(){ try{ const eff=effTheme(); document.body.classList.toggle
 function setTheme(t){ THEME=t; try{ localStorage.setItem('mg-theme',t); }catch(e){} applyTheme(); render(); }
 let themeTimer=setInterval(()=>{ if(THEME==='auto'){ const want=nightNow()?'dark':'light'; const has=document.body.classList.contains('light')?'light':'dark'; if(want!==has){ applyTheme(); render(); } } }, 30000);
 
-/* ---- Rattrapage (8 jours) ---- */
-const CATCHUP_DAYS=8;
+/* ---- Rattrapage (9 jours) ---- */
+const CATCHUP_DAYS=9;
 let catchupTarget=null;
 function missedDays(o){
   const out=[]; const today=new Date(); today.setHours(0,0,0,0);
