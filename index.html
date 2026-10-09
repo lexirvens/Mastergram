@@ -442,6 +442,11 @@ const I18N={
   undo:"Annuler la dernière",thisWeek:"Cette semaine",subDone:"Sous-objectif atteint",
   toValidate:"pour valider ta semaine",weeksRow:"sem. d'affilée",
   doneN:"faites",remainN:"restantes",daysLeft:"Jours restants",elapsed:"Temps écoulé",
+  maxDay:"Maximum 2 séances par jour.",
+  catchUpWeek:"Objectif relevé pour rattraper le retard accumulé.",
+  lightWeek:"Semaine allégée, tu es en avance sur ta moyenne.",
+  avgOnTrackNow:"Ta semaine en cours est déjà au niveau. Continue.",
+  thisWeekSoFar:"cette semaine :",withThisWeek:"avec elle :",
   avgTitle:"Ta moyenne par semaine",avgTarget:"visé",avgNone:"Ta moyenne apparaîtra après ta première semaine complète. Vise",perWeekEnd:"séances par semaine pour finir à temps.",
   avgAbove:"Tu es <b>au-dessus</b> du rythme visé. Tu peux te permettre une semaine plus légère.",
   avgPerfect:"Rythme parfait. Continue comme ça.",
@@ -526,6 +531,11 @@ const I18N={
   undo:"Undo last",thisWeek:"This week",subDone:"Weekly goal reached",
   toValidate:"to complete your week",weeksRow:"weeks in a row",
   doneN:"done",remainN:"left",daysLeft:"Days left",elapsed:"Time elapsed",
+  maxDay:"Maximum 2 sessions per day.",
+  catchUpWeek:"Target raised to make up the accumulated gap.",
+  lightWeek:"Lighter week, you are ahead of your average.",
+  avgOnTrackNow:"This week is already on target. Keep going.",
+  thisWeekSoFar:"this week:",withThisWeek:"with it:",
   avgTitle:"Your weekly average",avgTarget:"target",avgNone:"Your average appears after your first full week. Aim for",perWeekEnd:"sessions per week to finish on time.",
   avgAbove:"You're <b>above</b> your target pace. You can afford a lighter week.",
   avgPerfect:"Perfect pace. Keep it up.",
@@ -707,14 +717,22 @@ function freqMetrics(o){
   return {target,done,perSession,pct,expectedPct:timeFrac*100,daysLeft,remaining:Math.max(0,target-done)};
 }
 function wkTargetFor(o,monday){
-  if(o.weekOverrides){ const k=isoDate(mondayOf(monday)); if(o.weekOverrides[k]!=null) return Math.max(1,Math.round(o.weekOverrides[k])); }
-  // moyenne decimale (ex 4,5) => semaines alternees entieres : 5, 4, 5, 4...
+  const mon=mondayOf(monday);
+  if(o.weekOverrides){ const k=isoDate(mon); if(o.weekOverrides[k]!=null) return Math.max(1,Math.round(o.weekOverrides[k])); }
   const avg=Math.max(0.5,Number(o.weeklyTarget)||1);
-  const lo=Math.floor(avg), hi=Math.ceil(avg);
-  if(lo===hi) return Math.max(1,lo);
   const start=mondayOf(parseDate(o.startDate));
-  const idx=Math.max(0,Math.round((mondayOf(monday)-start)/6048e5));
-  return Math.max(1, idx%2===0 ? hi : lo);
+  const idx=Math.max(0,Math.round((mon-start)/6048e5));            // 0 = premiere semaine
+  const lo=Math.floor(avg), hi=Math.ceil(avg);
+  const CAP=(lo===hi)?lo:(hi+1);                                   // plafond de rattrapage
+  // total qu'il faudrait avoir cumule a la FIN de cette semaine
+  const needCum=Math.round(avg*(idx+1));
+  // total reellement fait AVANT cette semaine
+  let doneBefore=0;
+  if(o.sessions&&o.sessions.length){
+    for(const x of o.sessions){ const t=new Date(x.ts); if(t>=start && t<mon) doneBefore++; }
+  }
+  const target=needCum-doneBefore;
+  return Math.max(1, Math.min(CAP, target));
 }
 function weekBuckets(o,n){ const out=[]; const m=mondayOf(new Date()); for(let i=n-1;i>=0;i--){ const s=new Date(m); s.setDate(s.getDate()-i*7); const e=new Date(s); e.setDate(e.getDate()+7); const c=o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; out.push({count:c,label:s.getDate()+'/'+(s.getMonth()+1),mon:new Date(s)});} return out; }
 function monthBuckets(o,n){ const out=[]; const b=new Date(); b.setDate(1); b.setHours(0,0,0,0); for(let i=n-1;i>=0;i--){ const s=new Date(b.getFullYear(),b.getMonth()-i,1); const e=new Date(b.getFullYear(),b.getMonth()-i+1,1); const c=o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; out.push({count:c,label:MOISg()[s.getMonth()].replace('.','')});} return out; }
@@ -733,8 +751,11 @@ function wMetrics(o){
 }
 
 /* actions */
+const MAX_PER_DAY=2;
 async function logSession(){
   const o=active(); const before=freqMetrics(o).pct;
+  const todayISO=isoDate(new Date());
+  if(o.sessions.filter(x=>sameDay(x.ts,todayISO)).length>=MAX_PER_DAY){ showToast(T('maxDay')); return; }
   const mk=isoDate(mondayOf(new Date())); o.weekOverrides=o.weekOverrides||{}; if(o.weekOverrides[mk]==null) o.weekOverrides[mk]=wkTargetFor(o,mondayOf(new Date()));
   o.sessions.push({id:uid(),ts:new Date().toISOString()});
   await save(); render();
@@ -837,6 +858,7 @@ function renderFreq(o){
     <div class="subgoal">
       <div class="subgoal-top"><span class="subgoal-title">${T('thisWeek')}</span><span class="wk-ctrl"><button class="wk-step" id="wk-dec" aria-label="Diminuer l'objectif de la semaine">−</button><span class="subgoal-count num ${wkDone?'done':''}"><b>${cw}</b> / ${wt}</span><button class="wk-step" id="wk-inc" aria-label="Augmenter l'objectif de la semaine">+</button></span></div>
       <div class="mini-bar"><div class="mini-fill" style="width:${wkPct}%; background:${wkDone?'var(--gold)':'var(--grow)'}"></div></div>
+      ${(()=>{const avg=Number(o.weeklyTarget)||0; return (avg>0&&wt>Math.ceil(avg))?`<div class="note" style="margin-top:8px;color:var(--gold)">${T('catchUpWeek')}</div>`:(avg>0&&wt<Math.ceil(avg)?`<div class="note" style="margin-top:8px">${T('lightWeek')}</div>`:'');})()}
       <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak stk-${((streak-1)%7)+1}">${streak} ${T('weeksRow')}</span>`:'<span></span>'}</div>
     </div>
     ${avgGauge(o)}
@@ -868,6 +890,9 @@ function avgGauge(o){
       <div class="avg-msg" style="margin-top:8px;color:var(--muted)">${T('avgNone')} <b>${fr(need,1)}</b> ${T('perWeekEnd')}</div></div>`;
   }
   const avg=recent.reduce((a,b)=>a+b.count,0)/recent.length;
+  const cwCount=curWeek(o);
+  const avgWith=(recent.reduce((a,b)=>a+b.count,0)+cwCount)/(recent.length+1);
+  const cwTarget=wkTargetFor(o,mondayOf(new Date()));
   const MAXG=7;
   const pos=Math.min(100,(avg/MAXG)*100), tpos=Math.min(100,(need/MAXG)*100);
   const gap=avg-need;
@@ -876,11 +901,13 @@ function avgGauge(o){
   else if(gap>=-0.25){ color='var(--grow)'; msg=T('avgPerfect'); }
   else if(gap>=-0.75){ color='var(--gold)'; msg=T('avgSlip'); }
   else { color='var(--behind)'; msg=T('avgUnder')+' '+fr(need,1)+'.'; }
+  // la semaine en cours est deja au niveau : on ne crie plus au retard
+  if(cwCount>=cwTarget && gap<0){ color='var(--grow)'; msg=T('avgOnTrackNow'); }
   return `<div class="avg stat">
     <div class="avg-top"><span class="avg-title">${T('avgTitle')}</span><span class="avg-val" style="color:${color}">${fr(avg,1)} <span>/ ${fr(need,1)}</span></span></div>
     <div class="avg-gauge"><div class="avg-fill" style="width:${pos.toFixed(1)}%; background:${color}"></div><div class="avg-target" style="left:${tpos.toFixed(1)}%"></div></div>
     <div class="avg-msg" style="color:${color==='var(--grow)'?'var(--muted)':color}">${msg}</div>
-    <div class="avg-msg" style="color:var(--soft);margin-top:6px;font-size:11.5px">${T('lastWeeks')} ${recent.length} ${recent.length>1?T('weekPlur'):T('weekSing')}</div>
+    <div class="avg-msg" style="color:var(--soft);margin-top:6px;font-size:11.5px">${T('lastWeeks')} ${recent.length} ${recent.length>1?T('weekPlur'):T('weekSing')} · ${T('thisWeekSoFar')} ${cwCount}/${cwTarget} · ${T('withThisWeek')} ${fr(avgWith,1)}</div>
   </div>`;
 }
 function freqChart(o){
@@ -907,7 +934,7 @@ function freqSummary(o){
   const mo=monthBuckets(o,24).filter(x=>x.count>0); const best=mo.reduce((a,b)=>Math.max(a,b.count),0); const avg=mo.length?mo.reduce((a,b)=>a+b.count,0)/mo.length:0;
   return `<div class="an-summary"><div class="stat"><div class="stat-v num">${best}</div><div class="stat-l">${T('bestMonth')}</div></div><div class="stat"><div class="stat-v num">${fr(avg,1)}</div><div class="stat-l">${T('avgMonth')}</div></div><div class="stat"><div class="stat-v num">${mo.length}</div><div class="stat-l">${T('activeMonths')}</div></div></div>`;
 }
-function heatColor(c){ if(c<=0) return 'rgba(255,255,255,0.05)'; if(c===1) return 'rgba(61,220,138,0.32)'; if(c===2) return 'rgba(61,220,138,0.62)'; return '#3ddc8a'; }
+function heatColor(c){ if(c<=0) return 'var(--surface-2)'; if(c===1) return '#2f8f5f'; return '#4fc98a'; }
 function heatmap(o){
   const startReal=parseDate(o.startDate);
   const today=new Date(); today.setHours(0,0,0,0);
@@ -930,7 +957,7 @@ function heatmap(o){
   }
   const lbls=T('dayInit').map(x=>`<div class="cal-day-lbl">${x}</div>`).join('');
   return `<div class="cal-wrap"><div class="cal-days">${lbls}</div><div class="cal-scroll" id="cal-scroll"><div class="cal-grid"><div class="cal-months">${months}</div><div class="cal-cols">${cols}</div></div></div></div>
-    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px">${T('less')} <span class="cal-cell" style="background:rgba(255,255,255,0.05)"></span><span class="cal-cell" style="background:rgba(61,220,138,0.32)"></span><span class="cal-cell" style="background:rgba(61,220,138,0.62)"></span><span class="cal-cell" style="background:#3ddc8a"></span> ${T('more')}</div>`;
+    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px"><span class="cal-cell" style="background:var(--surface-2)"></span> 0 <span class="cal-cell" style="background:#2f8f5f;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#4fc98a;margin-left:8px"></span> 2</div>`;
 }
 function freqHistory(o){
   if(o.sessions.length===0) return `<div class="empty">${T('noneYet')} ${tItemS(o)} ${T('forNow')}<br>${T('firstWorth')} <b>${fr(100/Math.max(1,o.target),2)} %</b>.</div>`;
