@@ -410,6 +410,7 @@
   .motto { letter-spacing:.03em; }
   .sugg button { letter-spacing:.01em; text-decoration:none; border-bottom:1px solid var(--line); }
   .miss-day.nz { opacity:.72; }
+  .cal-cell.is-today { box-shadow:0 0 0 1.5px var(--gold); }
   @media (prefers-reduced-motion:reduce) { *, .overlay.open, .sheet { animation:none !important; transition:none !important; } }
 
   </style>
@@ -652,7 +653,7 @@ function T(k){ return (I18N[LANG]&&I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18
 function setLang(l){ LANG=l; try{ localStorage.setItem('mg-lang',l); }catch(e){} try{ document.documentElement.lang=l; }catch(e){} render(); }
 function frNum(n,dec){ const v=Number(n).toFixed(dec); return LANG==='fr'?v.replace('.',','):v; }
 
-const APP_VERSION='v30';
+const APP_VERSION='v31';
 const STORE_KEY = 'tracker-state';
 
 
@@ -953,6 +954,9 @@ function avgGauge(o){
     <div class="avg-msg" style="color:var(--soft);margin-top:6px;font-size:11.5px">${T('lastWeeks')} ${recent.length} ${recent.length>1?T('weekPlur'):T('weekSing')} · ${T('thisWeekSoFar')} ${cwCount}/${cwTarget} · ${T('withThisWeek')} ${fr(avgWith,1)}</div>
   </div>`;
 }
+// une couleur par volume hebdomadaire : plus tu en fais, plus c'est profond
+const BAR_COLS={0:'#6a727b',1:'#b9e8cf',2:'#8fe0b4',3:'#5fcf94',4:'#35b877',5:'#1f7a4c',6:'#15543a'};
+function barColor(c){ if(c>=7) return '#0f3d2a'; return BAR_COLS[c]||'#6a727b'; }
 function freqChart(o){
   const week = view==='week';
   const buckets = week ? weekBuckets(o,10) : monthBuckets(o,6);
@@ -963,7 +967,7 @@ function freqChart(o){
   const W=320,H=150,padT=12,padB=24,plotH=H-padT-padB,n=buckets.length,gap=7,barW=(W-gap*(n+1))/n;
   const maxV=Math.max(1,...targets.filter(x=>x!=null),...buckets.map(b=>b.count));
   let bars='',ticks='';
-  buckets.forEach((b,i)=>{ const x=gap+i*(barW+gap); const h=(b.count/maxV)*plotH; const y=padT+plotH-h; const cur=i===n-1; const col=cur?'var(--gold)':'var(--grow)';
+  buckets.forEach((b,i)=>{ const x=gap+i*(barW+gap); const h=(b.count/maxV)*plotH; const y=padT+plotH-h; const cur=i===n-1; const col=cur?'var(--gold)':barColor(b.count);
     bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" rx="4" fill="${col}" ${b.count===0?'opacity="0.25"':''}/>`;
     if(b.count>0) bars+=`<text x="${(x+barW/2).toFixed(1)}" y="${(y-5).toFixed(1)}" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="11" fill="var(--text)">${b.count}</text>`;
     bars+=`<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" fill="var(--muted)">${b.label}</text>`;
@@ -977,7 +981,14 @@ function freqSummary(o){
   const mo=monthBuckets(o,24).filter(x=>x.count>0); const best=mo.reduce((a,b)=>Math.max(a,b.count),0); const avg=mo.length?mo.reduce((a,b)=>a+b.count,0)/mo.length:0;
   return `<div class="an-summary"><div class="stat"><div class="stat-v num">${best}</div><div class="stat-l">${T('bestMonth')}</div></div><div class="stat"><div class="stat-v num">${fr(avg,1)}</div><div class="stat-l">${T('avgMonth')}</div></div><div class="stat"><div class="stat-v num">${mo.length}</div><div class="stat-l">${T('activeMonths')}</div></div></div>`;
 }
-function heatColor(c){ if(c<=0) return 'var(--surface-2)'; if(c===1) return '#2f8f5f'; return '#4fc98a'; }
+const NEUTRAL_COL='#5aa9e6';
+function heatColor(c,opt){
+  opt=opt||{};
+  if(opt.neutral && c<=0) return NEUTRAL_COL;
+  if(c<=0) return opt.today ? 'var(--surface-2)' : '#ffffff';
+  if(c===1) return '#8fe0b4';   // pale : une fois
+  return '#1f7a4c';             // fonce : deux fois
+}
 function heatmap(o){
   const startReal=parseDate(o.startDate);
   const today=new Date(); today.setHours(0,0,0,0);
@@ -994,13 +1005,14 @@ function heatmap(o){
     let cells='';
     for(let d=0;d<7;d++){ const day=new Date(colMon); day.setDate(day.getDate()+d);
       const ik=isoDate(day); const inRange=day>=startReal&&day<=today; const c=map[ik]||0; const nz=isNeutral(o,ik);
-      cells+= inRange ? `<div class="cal-cell" title="${ik} : ${nz?T('neutralShort'):c}" style="background:${nz&&c===0?'var(--line-strong)':heatColor(c)}"></div>` : `<div class="cal-cell" style="visibility:hidden"></div>`;
+      const isToday=day.getTime()===today.getTime();
+      cells+= inRange ? `<div class="cal-cell${isToday?' is-today':''}" title="${ik} : ${nz?T('neutralShort'):c}" style="background:${heatColor(c,{neutral:nz,today:isToday})}"></div>` : `<div class="cal-cell" style="visibility:hidden"></div>`;
     }
     cols+=`<div class="cal-col">${cells}</div>`;
   }
   const lbls=T('dayInit').map(x=>`<div class="cal-day-lbl">${x}</div>`).join('');
   return `<div class="cal-wrap"><div class="cal-days">${lbls}</div><div class="cal-scroll" id="cal-scroll"><div class="cal-grid"><div class="cal-months">${months}</div><div class="cal-cols">${cols}</div></div></div></div>
-    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px"><span class="cal-cell" style="background:var(--surface-2)"></span> 0 <span class="cal-cell" style="background:#2f8f5f;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#4fc98a;margin-left:8px"></span> 2</div>`;
+    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px"><span class="cal-cell" style="background:#ffffff"></span> 0 <span class="cal-cell" style="background:#8fe0b4;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#1f7a4c;margin-left:8px"></span> 2 <span class="cal-cell" style="background:#5aa9e6;margin-left:8px"></span> ${T('neutralShort')}</div>`;
 }
 function freqHistory(o){
   if(o.sessions.length===0) return `<div class="empty">${T('noneYet')} ${tItemS(o)} ${T('forNow')}<br>${T('firstWorth')} <b>${fr(100/Math.max(1,o.target),2)} %</b>.</div>`;
