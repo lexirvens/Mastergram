@@ -409,6 +409,7 @@
   .rulecard h4 { color:var(--gold); letter-spacing:.09em; font-size:10.5px; }
   .motto { letter-spacing:.03em; }
   .sugg button { letter-spacing:.01em; text-decoration:none; border-bottom:1px solid var(--line); }
+  .miss-day.nz { opacity:.72; }
   @media (prefers-reduced-motion:reduce) { *, .overlay.open, .sheet { animation:none !important; transition:none !important; } }
 
   </style>
@@ -443,6 +444,11 @@ const I18N={
   toValidate:"pour valider ta semaine",weeksRow:"sem. d'affilée",
   doneN:"faites",remainN:"restantes",daysLeft:"Jours restants",elapsed:"Temps écoulé",
   maxDay:"Maximum 2 séances par jour.",
+  neutralDo:"Jour neutralisé",neutralUndo:"Annuler",neutralShort:"neutralisé",
+  neutralHint:"Jours neutralisés utilisés :",neutralEnd:"fin repoussée au",
+  neutralWeek:"Jours neutralisés cette semaine :",
+  neutralOk:"Jour neutralisé. Soigne-toi.",neutralMax:"Plafond de 21 jours neutralisés atteint.",
+  neutralAsk:"Neutraliser ce jour ? À réserver à la maladie ou à un empêchement réel. Ce jour ne comptera ni en réussite ni en échec, et ta date de fin recule d'un jour. Sur l'honneur.",
   catchUpWeek:"Objectif relevé pour rattraper le retard accumulé.",
   lightWeek:"Semaine allégée, tu es en avance sur ta moyenne.",
   avgOnTrackNow:"Ta semaine en cours est déjà au niveau. Continue.",
@@ -532,6 +538,11 @@ const I18N={
   toValidate:"to complete your week",weeksRow:"weeks in a row",
   doneN:"done",remainN:"left",daysLeft:"Days left",elapsed:"Time elapsed",
   maxDay:"Maximum 2 sessions per day.",
+  neutralDo:"Neutralised day",neutralUndo:"Undo",neutralShort:"neutralised",
+  neutralHint:"Neutralised days used:",neutralEnd:"end pushed to",
+  neutralWeek:"Neutralised days this week:",
+  neutralOk:"Day neutralised. Take care of yourself.",neutralMax:"Cap of 21 neutralised days reached.",
+  neutralAsk:"Neutralise this day? Only for illness or a real impediment. It will count neither as a success nor a failure, and your end date moves back one day. On your honour.",
   catchUpWeek:"Target raised to make up the accumulated gap.",
   lightWeek:"Lighter week, you are ahead of your average.",
   avgOnTrackNow:"This week is already on target. Keep going.",
@@ -711,7 +722,7 @@ function active(){ return state.objectives.find(o=>o.id===state.activeId) || sta
 function freqMetrics(o){
   const target=Math.max(1,Number(o.target)||1);
   const done=o.sessions.length; const perSession=100/target; const pct=done*perSession;
-  const s=parseDate(o.startDate).getTime(), e=parseDate(o.endDate).getTime(), now=Date.now();
+  const s=parseDate(o.startDate).getTime(), e=effEndDate(o).getTime(), now=Date.now();
   const timeFrac=Math.max(0,Math.min(1,(now-s)/(e-s)));
   const daysLeft=Math.max(0,Math.ceil((e-now)/864e5));
   return {target,done,perSession,pct,expectedPct:timeFrac*100,daysLeft,remaining:Math.max(0,target-done)};
@@ -725,19 +736,26 @@ function wkTargetFor(o,monday){
   const lo=Math.floor(avg), hi=Math.ceil(avg);
   const CAP=(lo===hi)?lo:(hi+1);                                   // plafond de rattrapage
   // total qu'il faudrait avoir cumule a la FIN de cette semaine
-  const needCum=Math.round(avg*(idx+1));
+  // chaque jour neutralise avant cette semaine retire 1/7 de semaine d'attente
+  let nzBefore=0; const nset=neutralSet(o);
+  for(const k in nset){ const d=parseDate(k); if(d>=start && d<mon) nzBefore++; }
+  const effWeeks=Math.max(0,(idx+1)-(nzBefore/7));
+  const needCum=Math.round(avg*effWeeks);
   // total reellement fait AVANT cette semaine
   let doneBefore=0;
   if(o.sessions&&o.sessions.length){
     for(const x of o.sessions){ const t=new Date(x.ts); if(t>=start && t<mon) doneBefore++; }
   }
-  const target=needCum-doneBefore;
+  let target=needCum-doneBefore;
+  const nz=neutralInWeek(o,mon);
+  if(nz>0){ target=Math.round(target*(7-nz)/7); }
+  if(nz>=7) return 0;
   return Math.max(1, Math.min(CAP, target));
 }
 function weekBuckets(o,n){ const out=[]; const m=mondayOf(new Date()); for(let i=n-1;i>=0;i--){ const s=new Date(m); s.setDate(s.getDate()-i*7); const e=new Date(s); e.setDate(e.getDate()+7); const c=o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; out.push({count:c,label:s.getDate()+'/'+(s.getMonth()+1),mon:new Date(s)});} return out; }
 function monthBuckets(o,n){ const out=[]; const b=new Date(); b.setDate(1); b.setHours(0,0,0,0); for(let i=n-1;i>=0;i--){ const s=new Date(b.getFullYear(),b.getMonth()-i,1); const e=new Date(b.getFullYear(),b.getMonth()-i+1,1); const c=o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; out.push({count:c,label:MOISg()[s.getMonth()].replace('.','')});} return out; }
 function curWeek(o){ const s=mondayOf(new Date()); const e=new Date(s); e.setDate(e.getDate()+7); return o.sessions.filter(x=>{const t=new Date(x.ts);return t>=s&&t<e;}).length; }
-function weekStreak(o){ const all=weekBuckets(o,80); let st=0; for(let i=all.length-2;i>=0;i--){ if(all[i].count>=wkTargetFor(o,all[i].mon)) st++; else break; } const cur=all[all.length-1]; if(cur.count>=wkTargetFor(o,cur.mon)) st++; return st; }
+function weekStreak(o){ const all=weekBuckets(o,80); let st=0; for(let i=all.length-2;i>=0;i--){ if(neutralInWeek(o,all[i].mon)>=7) continue; if(all[i].count>=wkTargetFor(o,all[i].mon)) st++; else break; } const cur=all[all.length-1]; if(cur.count>=wkTargetFor(o,cur.mon)) st++; return st; }
 
 /* weight calc */
 function wMetrics(o){
@@ -815,7 +833,8 @@ function render(){
 
 function subline(o){
   if(o.type==='frequency'){
-    const base=`${o.target} ${tItemP(o)} · ${LANG==='en'?'ends':'fin le'} ${fmtDate(parseDate(o.endDate))}`;
+    const nzc=neutralCount(o);
+    const base=`${o.target} ${tItemP(o)} · ${LANG==='en'?'ends':'fin le'} ${fmtDate(effEndDate(o))}${nzc?' · '+nzc+' '+T('neutralShort'):''}`;
     if(o.key==='read'&&o.pagesPerDay) return `${o.pagesPerDay} ${LANG==='en'?'pages/day':'pages/jour'} · ${base}`;
     return base;
   }
@@ -858,6 +877,7 @@ function renderFreq(o){
     <div class="subgoal">
       <div class="subgoal-top"><span class="subgoal-title">${T('thisWeek')}</span><span class="wk-ctrl"><button class="wk-step" id="wk-dec" aria-label="Diminuer l'objectif de la semaine">−</button><span class="subgoal-count num ${wkDone?'done':''}"><b>${cw}</b> / ${wt}</span><button class="wk-step" id="wk-inc" aria-label="Augmenter l'objectif de la semaine">+</button></span></div>
       <div class="mini-bar"><div class="mini-fill" style="width:${wkPct}%; background:${wkDone?'var(--gold)':'var(--grow)'}"></div></div>
+      ${(()=>{const nz=neutralInWeek(o,mondayOf(new Date())); return nz>0?`<div class="note" style="margin-top:8px">${T('neutralWeek')} ${nz}</div>`:'';})()}
       ${(()=>{const avg=Number(o.weeklyTarget)||0; return (avg>0&&wt>Math.ceil(avg))?`<div class="note" style="margin-top:8px;color:var(--gold)">${T('catchUpWeek')}</div>`:(avg>0&&wt<Math.ceil(avg)?`<div class="note" style="margin-top:8px">${T('lightWeek')}</div>`:'');})()}
       <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak stk-${((streak-1)%7)+1}">${streak} ${T('weeksRow')}</span>`:'<span></span>'}</div>
     </div>
@@ -883,7 +903,7 @@ function avgGauge(o){
   const all=weekBuckets(o,80);
   const startDay=parseDate(o.startDate);
   // on ne compte que les semaines ENTIERES commencees apres le depart
-  const past=all.filter(b=>b.mon>=startDay && b.mon<mondayOf(new Date()));
+  const past=all.filter(b=>b.mon>=startDay && b.mon<mondayOf(new Date()) && neutralInWeek(o,b.mon)<7);
   const recent=past.slice(-8);
   if(recent.length===0){
     return `<div class="avg stat"><div class="avg-top"><span class="avg-title">${T('avgTitle')}</span><span class="avg-val">—</span></div>
@@ -950,8 +970,8 @@ function heatmap(o){
     months+=`<div class="cal-month">${ml}</div>`;
     let cells='';
     for(let d=0;d<7;d++){ const day=new Date(colMon); day.setDate(day.getDate()+d);
-      const inRange=day>=startReal&&day<=today; const c=map[isoDate(day)]||0;
-      cells+= inRange ? `<div class="cal-cell" title="${isoDate(day)} : ${c}" style="background:${heatColor(c)}"></div>` : `<div class="cal-cell" style="visibility:hidden"></div>`;
+      const ik=isoDate(day); const inRange=day>=startReal&&day<=today; const c=map[ik]||0; const nz=isNeutral(o,ik);
+      cells+= inRange ? `<div class="cal-cell" title="${ik} : ${nz?T('neutralShort'):c}" style="background:${nz&&c===0?'var(--line-strong)':heatColor(c)}"></div>` : `<div class="cal-cell" style="visibility:hidden"></div>`;
     }
     cols+=`<div class="cal-col">${cells}</div>`;
   }
@@ -1309,12 +1329,12 @@ async function pushProgress(){
   const o=state.objectives.find(x=>x.type==='frequency'); if(!o) return;
   const m=freqMetrics(o);
   const freqs=state.objectives.filter(x=>x.type==='frequency');
-  const detail={objectives:freqs.map(f=>({id:f.id,key:f.key||null,name:f.name,renamed:!!f.renamed,itemKey:f.itemKey||'session',actionKey:f.actionKey||'generic',startDate:f.startDate,endDate:f.endDate,target:f.target,weeklyTarget:f.weeklyTarget,weekOverrides:f.weekOverrides||{},sessions:f.sessions||[],reached:f.reached||[]}))};
+  const detail={objectives:freqs.map(f=>({id:f.id,key:f.key||null,name:f.name,renamed:!!f.renamed,itemKey:f.itemKey||'session',actionKey:f.actionKey||'generic',startDate:f.startDate,endDate:f.endDate,target:f.target,weeklyTarget:f.weeklyTarget,weekOverrides:f.weekOverrides||{},neutral:f.neutral||{},sessions:f.sessions||[],reached:f.reached||[]}))};
   const wt=Number(wkTargetFor(o,mondayOf(new Date())))||1;
   const row={ user_id:me.id, group_id:myGroup.id, goal_name:tName(o), pct:Number(m.pct.toFixed(2)),
     done:Math.round(m.done), target:Math.round(m.target),
     week_count:Math.round(curWeek(o)), week_target:Math.round(wt), week_target_exact:Number(wt),
-    streak:Math.round(weekStreak(o)), detail:detail, updated_at:new Date().toISOString() };
+    streak:Math.round(weekStreak(o)), neutral_days:neutralCount(o), detail:detail, updated_at:new Date().toISOString() };
   try{
     const {error}=await sb.from('progress').upsert(row,{onConflict:'user_id,group_id'});
     if(error) throw error;
@@ -1322,7 +1342,7 @@ async function pushProgress(){
   }catch(e){
     // 2e tentative sans les colonnes recentes, au cas ou la base ne les a pas encore
     try{
-      const slim={...row}; delete slim.detail; delete slim.week_target_exact;
+      const slim={...row}; delete slim.detail; delete slim.week_target_exact; delete slim.neutral_days;
       const {error:e2}=await sb.from('progress').upsert(slim,{onConflict:'user_id,group_id'});
       if(e2) throw e2;
       lastSyncError=null; return true;
@@ -1431,6 +1451,31 @@ function applyTheme(){ try{ const eff=effTheme(); document.body.classList.toggle
 function setTheme(t){ THEME=t; try{ localStorage.setItem('mg-theme',t); }catch(e){} applyTheme(); render(); }
 let themeTimer=setInterval(()=>{ if(THEME==='auto'){ const want=nightNow()?'dark':'light'; const has=document.body.classList.contains('light')?'light':'dark'; if(want!==has){ applyTheme(); render(); } } }, 30000);
 
+
+/* ---- Jours neutralises (maladie, force majeure) ---- */
+const MAX_NEUTRAL=21;
+function neutralSet(o){ return (o.neutral&&typeof o.neutral==='object')?o.neutral:{}; }
+function neutralCount(o){ return Object.keys(neutralSet(o)).length; }
+function isNeutral(o,iso){ return !!neutralSet(o)[iso]; }
+function neutralInWeek(o,monday){
+  const m=mondayOf(monday); const n=neutralSet(o); let c=0;
+  for(let i=0;i<7;i++){ const d=new Date(m); d.setDate(d.getDate()+i); if(n[isoDate(d)]) c++; }
+  return c;
+}
+// la date de fin recule d'un jour par jour neutralise
+function effEndDate(o){
+  const e=parseDate(o.endDate); e.setDate(e.getDate()+neutralCount(o)); return e;
+}
+async function toggleNeutral(iso){
+  const o=active(); if(o.type!=='frequency') return;
+  o.neutral=neutralSet(o);
+  if(o.neutral[iso]){ delete o.neutral[iso]; await save(); openCatchup(); pushProgress(); scheduleSync(); return; }
+  if(neutralCount(o)>=MAX_NEUTRAL){ showToast(T('neutralMax')); return; }
+  if(!confirm(T('neutralAsk'))) return;
+  o.neutral[iso]=1; await save(); openCatchup(); pushProgress(); scheduleSync();
+  showToast(T('neutralOk'));
+}
+
 /* ---- Rattrapage (9 jours) ---- */
 const CATCHUP_DAYS=9;
 let catchupTarget=null;
@@ -1460,12 +1505,14 @@ function openCatchup(){
   const days=missedDays(o);
   let rows='';
   days.forEach(d=>{
-    rows+=`<div class="miss-day"><span>${fmtDayHead(d.date)}${d.count>0?` · <b style="color:var(--grow)">${d.count}</b>`:''}</span>
-      <button class="miss-add" data-add="${d.key}">+ 1 ${tItemS(o)}</button></div>`;
+    const nz=isNeutral(o,d.key);
+    rows+=`<div class="miss-day ${nz?'nz':''}"><span>${fmtDayHead(d.date)}${d.count>0?` · <b style="color:var(--grow)">${d.count}</b>`:''}${nz?` · <i style="color:var(--muted);font-style:normal">${T('neutralShort')}</i>`:''}</span>
+      <span style="display:flex;gap:7px">${nz?'':`<button class="miss-add" data-add="${d.key}">+ 1 ${tItemS(o)}</button>`}<button class="miss-add" data-nz="${d.key}">${nz?T('neutralUndo'):T('neutralDo')}</button></span></div>`;
   });
   sheet.innerHTML=`<h2>${T('catchTitle')}</h2>
     <p class="hint">${T('catchHint')}</p>
     <div class="swear">${T('swearText')}</div>
+    <div class="note" style="margin:0 0 12px">${T('neutralHint')} ${neutralCount(o)}/${MAX_NEUTRAL}${neutralCount(o)>0?' · '+T('neutralEnd')+' '+fmtDate(effEndDate(o)):''}</div>
     ${rows||`<div class="empty">${T('catchNone')}</div>`}
     ${o.catchupOpen?`<button class="alt-btn" id="cu-lock">${T('catchClose')}</button>`:`<button class="alt-btn" id="cu-open">${T('catchOpen')}</button>`}
     <button class="save-btn" id="cu-close">${T('done')}</button>`;
@@ -1474,6 +1521,7 @@ function openCatchup(){
   if(cuo) cuo.onclick=async()=>{ if(confirm(T('catchOpenAsk'))){ o.catchupOpen=true; await save(); openCatchup(); } };
   const cul=document.getElementById('cu-lock');
   if(cul) cul.onclick=async()=>{ o.catchupOpen=false; await save(); openCatchup(); showToast(T('catchClosed')); };
+  document.querySelectorAll('[data-nz]').forEach(b=>{ b.onclick=()=>toggleNeutral(b.dataset.nz); });
   document.querySelectorAll('[data-add]').forEach(b=>{ b.onclick=()=>{
     if(confirm(T('swearConfirm'))) addPastSession(b.dataset.add);
   }; });
@@ -1829,7 +1877,7 @@ function renderGroupe(){
         <div class="mate-pct" style="color:${col}">${p?fr(pct,1):'—'}<span style="font-size:13px;color:var(--muted)">%</span></div>
       </div>
       <div class="mate-bar"><div class="mate-fill" style="width:${Math.min(100,pct).toFixed(1)}%; background:${col}"></div></div>
-      <div class="mate-foot"><span>${p?p.done+' / '+p.target:''}</span><span>${p?T('weekLbl')+' : '+p.week_count+'/'+p.week_target+(p.streak>0?(' · '+p.streak+' '+(LANG==='en'?'wks':'sem.')):''):''}</span></div>
+      <div class="mate-foot"><span>${p?p.done+' / '+p.target+((p.neutral_days>0)?(' · '+p.neutral_days+' '+T('neutralShort')):''):''}</span><span>${p?T('weekLbl')+' : '+p.week_count+'/'+p.week_target+(p.streak>0?(' · '+p.streak+' '+(LANG==='en'?'wks':'sem.')):''):''}</span></div>
       ${(mates.length>1&&gap>0.01)?`<div class="gapline">${T('behindLeader')} ${fr(gap,2)} %</div>`:((rk===1&&mates.length>1&&p)?`<div class="gapline" style="color:var(--gold)">${T('leading')}</div>`:'')}
       <div class="mate-act"><button class="chip" data-detail="${mt.id}">${LANG==='en'?'Details':'Détails'}</button><button class="chip" data-enc="${mt.id}" data-name="${escapeAttr(mt.pseudo)}">${T('encourage')}</button><button class="chip" data-cmt="${mt.id}">${T('commentsL')}${(()=>{const n=comments.filter(c=>c.target_id===mt.id).length; return n?(' · '+n):'';})()}</button></div>
     </div>`;
