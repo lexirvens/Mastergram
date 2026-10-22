@@ -443,6 +443,9 @@ const I18N={
   undo:"Annuler la dernière",thisWeek:"Cette semaine",subDone:"Sous-objectif atteint",
   toValidate:"pour valider ta semaine",weeksRow:"sem. d'affilée",
   doneN:"faites",remainN:"restantes",daysLeft:"Jours restants",elapsed:"Temps écoulé",
+  showMore:"Voir plus",showLess:"Voir moins",
+  wAhead:"En avance sur ta courbe",wSlip:"Léger retard sur la courbe",wBehind:"En retard sur la courbe",
+  wNoData:"Entre un poids de départ et un objectif",wNeed:"Il reste",wPerWeek:" par semaine",
   maxDay:"Maximum 2 séances par jour.",
   neutralDo:"Jour neutralisé",neutralUndo:"Annuler",neutralShort:"neutralisé",
   neutralHint:"Jours neutralisés utilisés :",neutralEnd:"fin repoussée au",
@@ -537,6 +540,9 @@ const I18N={
   undo:"Undo last",thisWeek:"This week",subDone:"Weekly goal reached",
   toValidate:"to complete your week",weeksRow:"weeks in a row",
   doneN:"done",remainN:"left",daysLeft:"Days left",elapsed:"Time elapsed",
+  showMore:"Show more",showLess:"Show less",
+  wAhead:"Ahead of your curve",wSlip:"Slightly behind the curve",wBehind:"Behind the curve",
+  wNoData:"Set a starting weight and a goal",wNeed:"Still",wPerWeek:" per week",
   maxDay:"Maximum 2 sessions per day.",
   neutralDo:"Neutralised day",neutralUndo:"Undo",neutralShort:"neutralised",
   neutralHint:"Neutralised days used:",neutralEnd:"end pushed to",
@@ -654,6 +660,8 @@ const MILESTONES = [25,50,75,100];
 let state = null;
 let view = 'week';
 let view3 = 'objectifs';
+const HIST_STEP=7;
+let histShown=HIST_STEP;
 let editId = null;
 let newType = 'frequency';
 
@@ -673,7 +681,8 @@ function MOISg(){ return T('months'); }
 function JOURSg(){ return T('days'); }
 
 function freqObj(name,s,e,target,weekly,is,ip,action){ return {id:uid(),type:'frequency',name,startDate:s,endDate:e,target,weeklyTarget:weekly,itemS:is,itemP:ip,actionLabel:action,sessions:[],reached:[]}; }
-function weightObj(name,unit){ return {id:uid(),type:'weight',name,unit:unit||'lbs',startWeight:null,goalWeight:null,entries:[]}; }
+function weightObj(name,unit){ const t=new Date(); const e=new Date(); e.setMonth(e.getMonth()+6);
+  return {id:uid(),type:'weight',name,unit:unit||'lbs',startWeight:null,goalWeight:null,startDate:isoDate(t),endDate:isoDate(e),entries:[]}; }
 
 function defaultObjectives(){
   const t=new Date();
@@ -704,7 +713,9 @@ async function load(){
   if (!state.objectives || !state.objectives.length) state.objectives=defaultObjectives();
   state.objectives.forEach(o=>{
     if(o.type==='frequency'){ o.sessions=o.sessions||[]; o.reached=o.reached||[]; if(!o.weeklyTarget) o.weeklyTarget=Math.max(1,Math.round(o.target/26)); o.itemS=o.itemS||'séance'; o.itemP=o.itemP||'séances'; o.actionLabel=o.actionLabel||"J'ai fait ma séance"; }
-    else { o.entries=o.entries||[]; o.unit=o.unit||'lbs'; }
+    else { o.entries=o.entries||[]; o.unit=o.unit||'lbs';
+      if(!o.startDate){ const f=o.entries.length?new Date(o.entries[0].ts):new Date(); o.startDate=isoDate(f); }
+      if(!o.endDate){ const e=parseDate(o.startDate); e.setMonth(e.getMonth()+6); o.endDate=isoDate(e); } }
     if(!o.key){
       const n=(o.name||'').toLowerCase();
       if(o.type==='weight'&&(n==='poids'||n==='weight')) o.key='weight';
@@ -765,7 +776,17 @@ function wMetrics(o){
   const goal=o.goalWeight;
   let progress=null;
   if(cur!=null&&start!=null&&goal!=null&&goal!==start){ progress=Math.max(0,Math.min(100,((cur-start)/(goal-start))*100)); }
-  return {ent,cur,start,goal,progress,change:(cur!=null&&start!=null)?cur-start:null};
+  let daysLeft=null,timePct=null,pace=null,needPerWeek=null;
+  if(o.startDate&&o.endDate){
+    const sT=parseDate(o.startDate).getTime(), eT=parseDate(o.endDate).getTime(), now=Date.now();
+    if(eT>sT){
+      timePct=Math.max(0,Math.min(100,((now-sT)/(eT-sT))*100));
+      daysLeft=Math.max(0,Math.ceil((eT-now)/864e5));
+      if(progress!=null) pace=progress-timePct;
+      if(cur!=null&&goal!=null&&daysLeft>0){ needPerWeek=(goal-cur)/(daysLeft/7); }
+    }
+  }
+  return {ent,cur,start,goal,progress,daysLeft,timePct,pace,needPerWeek,change:(cur!=null&&start!=null)?cur-start:null};
 }
 
 /* actions */
@@ -838,7 +859,8 @@ function subline(o){
     if(o.key==='read'&&o.pagesPerDay) return `${o.pagesPerDay} ${LANG==='en'?'pages/day':'pages/jour'} · ${base}`;
     return base;
   }
-  const m=wMetrics(o); return o.goalWeight!=null?`${T('goal').toLowerCase()} ${fr(o.goalWeight,1)} ${o.unit}`:`${LANG==='en'?'in':'en'} ${o.unit}`;
+  const g=o.goalWeight!=null?`${T('goal').toLowerCase()} ${fr(o.goalWeight,1)} ${o.unit}`:`${LANG==='en'?'in':'en'} ${o.unit}`;
+  return o.endDate?`${g} · ${LANG==='en'?'ends':'fin le'} ${fmtDate(parseDate(o.endDate))}`:g;
 }
 
 function renderFreq(o){
@@ -982,12 +1004,15 @@ function heatmap(o){
 function freqHistory(o){
   if(o.sessions.length===0) return `<div class="empty">${T('noneYet')} ${tItemS(o)} ${T('forNow')}<br>${T('firstWorth')} <b>${fr(100/Math.max(1,o.target),2)} %</b>.</div>`;
   const g={}; for(const s of o.sessions){ const k=dayKey(s.ts); (g[k]=g[k]||[]).push(s); }
-  const keys=Object.keys(g).sort().reverse().slice(0,90); const per=100/Math.max(1,o.target); let html='';
+  const allKeys=Object.keys(g).sort().reverse();
+  const keys=allKeys.slice(0,histShown); const per=100/Math.max(1,o.target); let html='';
   for(const k of keys){ const list=g[k].sort((a,b)=>new Date(b.ts)-new Date(a.ts)); const d=parseDate(k);
     html+=`<div class="day-group"><div class="day-head">${fmtDayHead(d)} <span class="day-badge">+${fr(per*list.length,2)} %</span></div>`;
     for(const s of list){ const t=new Date(s.ts); const hh=String(t.getHours()).padStart(2,'0'),mm=String(t.getMinutes()).padStart(2,'0');
       html+=`<div class="sess"><span class="sess-time">${hh}:${mm}</span><span style="display:flex;align-items:center;gap:12px"><span class="sess-pct num">+${fr(per,2)} %</span><button class="sess-del" data-del="${s.id}" aria-label="Supprimer">×</button></span></div>`; }
     html+=`</div>`; }
+  if(allKeys.length>keys.length) html+=`<button class="alt-btn" id="hist-more" style="margin-top:10px">${T('showMore')} (${allKeys.length-keys.length})</button>`;
+  else if(histShown>HIST_STEP) html+=`<button class="alt-btn" id="hist-less" style="margin-top:10px">${T('showLess')}</button>`;
   return html;
 }
 
@@ -1004,10 +1029,30 @@ function renderWeight(o){
   return `
     <div class="w-hero"><div class="w-big num">${heroNum}</div><div class="w-sub">${changeTxt}</div></div>
     ${goalBar}
+    ${wPace(o,m)}
     <div class="w-input-row"><input id="w-val" type="number" inputmode="decimal" step="0.1" placeholder="${T('yourWeight')} ${o.unit}"><button id="w-log">${T('addWeight')}</button></div>
     <div class="analytics"><div class="an-head"><h2>${LANG==='en'?'Progress':'Évolution'}</h2></div><div class="chart-card">${weightChart(o)}</div>${weightSummary(o,m)}</div>
     <div class="hist"><h2>${T('history')}</h2>${weightHistory(o)}</div>
   `;
+}
+
+function wPace(o,m){
+  if(m.timePct==null) return '';
+  let txt='',col='var(--muted)';
+  if(m.pace!=null){
+    if(m.pace>=3){ col='var(--grow)'; txt=T('wAhead'); }
+    else if(m.pace>=-3){ col='var(--grow)'; txt=T('onTime'); }
+    else if(m.pace>=-12){ col='var(--gold)'; txt=T('wSlip'); }
+    else { col='var(--behind)'; txt=T('wBehind'); }
+  } else { txt=T('wNoData'); }
+  const need=(m.needPerWeek!=null&&Math.abs(m.needPerWeek)>=0.01)
+    ? `${T('wNeed')} ${fr(Math.abs(m.needPerWeek),2)} ${o.unit}${T('wPerWeek')}` : '';
+  return `<div class="pace" style="margin-top:18px">
+    <div class="pace-head"><span class="pace-label">${T('pace')}</span><span style="color:${col};font-weight:600;font-size:12.5px">${txt}</span></div>
+    <div class="pace-bar"><div class="pace-fill" style="width:${Math.min(100,m.progress!=null?m.progress:0).toFixed(1)}%; background:${col}"></div><div class="pace-marker" data-lbl="${T('expected')}" style="left:${m.timePct.toFixed(1)}%"></div></div>
+    <div class="w-sub" style="display:flex;justify-content:space-between;margin-top:16px;font-size:12px;color:var(--muted)">
+      <span>${m.daysLeft} ${T('daysLeft').toLowerCase()}</span><span>${need}</span></div>
+  </div>`;
 }
 function weightChart(o){
   const ent=[...o.entries].sort((a,b)=>new Date(a.ts)-new Date(b.ts)).slice(-30);
@@ -1066,6 +1111,7 @@ function openSettings(id){
       <div class="field"><label>${T('name')}</label><input id="s-name" type="text" value="${escapeAttr(tName(o))}"></div>
       <div class="field"><label>${T('unit')}</label><input id="s-unit" type="text" value="${escapeAttr(o.unit)}"></div>
       <div class="row2"><div class="field"><label>${LANG==='en'?'Starting weight':'Poids de départ'}</label><input id="s-wstart" type="number" step="0.1" value="${o.startWeight!=null?o.startWeight:''}"></div><div class="field"><label>${T('goal')}</label><input id="s-wgoal" type="number" step="0.1" value="${o.goalWeight!=null?o.goalWeight:''}"></div></div>
+      <div class="row2"><div class="field"><label>${T('start')}</label><input id="s-wsd" type="date" value="${o.startDate||''}"></div><div class="field"><label>${T('end')}</label><input id="s-wed" type="date" value="${o.endDate||''}"></div></div>
       <div class="sheet-sep"></div>
       <div class="sheet-sub">${T('theme')}</div>
       <div class="typerow"><button id="th-auto" class="${THEME==='auto'?'sel':''}">${T('autoM')}</button><button id="th-dark" class="${THEME==='dark'?'sel':''}">${T('dark')}</button><button id="th-light" class="${THEME==='light'?'sel':''}">${T('lightM')}</button></div>
@@ -1134,6 +1180,8 @@ async function saveFreq(o){
 async function saveWeight(o){
   const nw=(document.getElementById('s-name').value||'').trim(); if(nw&&nw!==tName(o)){ o.name=nw; o.renamed=true; }
   o.unit=(document.getElementById('s-unit').value||'lbs').trim()||'lbs';
+  const sd=document.getElementById('s-wsd'), ed=document.getElementById('s-wed');
+  if(sd&&ed&&sd.value&&ed.value){ if(parseDate(ed.value)<=parseDate(sd.value)){ showToast(T('tCheckDates')); return; } o.startDate=sd.value; o.endDate=ed.value; }
   const ws=document.getElementById('s-wstart').value, wg=document.getElementById('s-wgoal').value;
   o.startWeight=ws!==''?parseFloat(ws.replace(',','.')):o.startWeight;
   o.goalWeight=wg!==''?parseFloat(wg.replace(',','.')):null;
@@ -1219,7 +1267,7 @@ function closeSheet(){ document.getElementById('overlay').classList.remove('open
 function focusSheet(){ setTimeout(()=>{ const f=document.querySelector('#sheet input'); if(f) f.focus(); }, 60); }
 
 function wire(){
-  document.querySelectorAll('[data-tab]').forEach(b=>{ b.onclick=()=>{ state.activeId=b.dataset.tab; view='week'; view3='objectifs'; openMateDetail=null; render(); }; });
+  document.querySelectorAll('[data-tab]').forEach(b=>{ b.onclick=()=>{ state.activeId=b.dataset.tab; view='week'; view3='objectifs'; openMateDetail=null; histShown=HIST_STEP; render(); }; });
   const tg=document.getElementById('tab-groupe'); if(tg) tg.onclick=async()=>{ view3='groupe'; openMateDetail=null; render(); if(me){ try{ await pushProgress(); }catch(e){} await loadGroup(); render(); } };
   if(view3==='groupe') wireGroupe();
   const add=document.getElementById('tab-add'); if(add) add.onclick=openAdd;
@@ -1243,6 +1291,8 @@ function wire(){
   }
   const sh=document.getElementById('share'); if(sh) sh.onclick=shareSummary;
   const cu=document.getElementById('catchup'); if(cu) cu.onclick=openCatchup;
+  const hm=document.getElementById('hist-more'); if(hm) hm.onclick=()=>{ histShown+=HIST_STEP; render(); };
+  const hl=document.getElementById('hist-less'); if(hl) hl.onclick=()=>{ histShown=HIST_STEP; render(); };
   const ug=document.getElementById('upd-go'); if(ug) ug.onclick=()=>applyUpdate(ug);
 }
 
