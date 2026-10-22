@@ -652,6 +652,7 @@ function T(k){ return (I18N[LANG]&&I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18
 function setLang(l){ LANG=l; try{ localStorage.setItem('mg-lang',l); }catch(e){} try{ document.documentElement.lang=l; }catch(e){} render(); }
 function frNum(n,dec){ const v=Number(n).toFixed(dec); return LANG==='fr'?v.replace('.',','):v; }
 
+const APP_VERSION='v30';
 const STORE_KEY = 'tracker-state';
 
 
@@ -1102,6 +1103,7 @@ function openSettings(id){
       <button class="alt-btn" id="s-export">${T('exportD')}</button>
       <button class="alt-btn" id="s-import">${T('importD')}</button>
       <button class="alt-btn" id="s-update">${T('checkUpd')}</button>
+      <div class="note" style="text-align:center;margin-top:6px">Mastergram ${APP_VERSION}</div>
       <button class="save-btn" id="s-save">${T('save')}</button>
       ${canDelete?('<button class="del-btn" id="s-del">'+T('deleteObj')+'</button>'):''}`;
     document.getElementById('s-save').onclick=()=>saveFreq(o);
@@ -1122,6 +1124,7 @@ function openSettings(id){
       <button class="alt-btn" id="s-export">${T('exportD')}</button>
       <button class="alt-btn" id="s-import">${T('importD')}</button>
       <button class="alt-btn" id="s-update">${T('checkUpd')}</button>
+      <div class="note" style="text-align:center;margin-top:6px">Mastergram ${APP_VERSION}</div>
       <button class="save-btn" id="s-save">${T('save')}</button>
       ${canDelete?('<button class="del-btn" id="s-del">'+T('deleteObj')+'</button>'):''}`;
     document.getElementById('s-save').onclick=()=>saveWeight(o);

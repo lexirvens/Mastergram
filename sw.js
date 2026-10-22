@@ -1,20 +1,51 @@
-const CACHE = 'mastergram-v29';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const CACHE = 'mastergram-v30';
+const ASSETS = ['./manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(ASSETS).catch(() => null)).then(() => self.skipWaiting())
+  );
 });
+
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
+
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  const isDoc = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+
+  if (isDoc) {
+    // Reseau d'abord : l'app se met a jour des qu'une connexion existe.
+    e.respondWith(
+      fetch(req, { cache: 'no-store' })
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => { try { c.put(req, copy); } catch (_) {} });
+          return res;
+        })
+        .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Images et manifeste : cache d'abord, c'est stable et leger.
   e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
+    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
       const copy = res.clone();
-      caches.open(CACHE).then((c) => { try { c.put(e.request, copy); } catch (_) {} });
+      caches.open(CACHE).then((c) => { try { c.put(req, copy); } catch (_) {} });
       return res;
     }).catch(() => cached))
   );
 });
 
-self.addEventListener('message',(e)=>{ if(e.data&&e.data.type==='SKIP_WAITING') self.skipWaiting(); });
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
