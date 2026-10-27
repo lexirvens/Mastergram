@@ -669,7 +669,7 @@ function T(k){ return (I18N[LANG]&&I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18
 function setLang(l){ LANG=l; try{ localStorage.setItem('mg-lang',l); }catch(e){} try{ document.documentElement.lang=l; }catch(e){} render(); }
 function frNum(n,dec){ const v=Number(n).toFixed(dec); return LANG==='fr'?v.replace('.',','):v; }
 
-const APP_VERSION='v32';
+const APP_VERSION='v33';
 const STORE_KEY = 'tracker-state';
 
 
@@ -752,7 +752,12 @@ function freqMetrics(o){
   const target=Math.max(1,Number(o.target)||1);
   const done=o.sessions.length; const perSession=100/target; const pct=done*perSession;
   const s=parseDate(o.startDate).getTime(), e=effEndDate(o).getTime(), now=Date.now();
-  const timeFrac=Math.max(0,Math.min(1,(now-s)/(e-s)));
+  // les jours neutralises sortent de l'horloge : ils ne font pas monter l'attente
+  let nzPast=0; const nset=(typeof neutralSet==='function')?neutralSet(o):{};
+  for(const k in nset){ const t=parseDate(k).getTime(); if(t>=s && t<=now) nzPast++; }
+  const baseSpan=Math.max(1, parseDate(o.endDate).getTime()-s);   // duree d'origine
+  const elapsedEff=Math.max(0,(now-s)-nzPast*864e5);              // temps reellement du
+  const timeFrac=Math.max(0,Math.min(1, elapsedEff/baseSpan));
   const daysLeft=Math.max(0,Math.ceil((e-now)/864e5));
   return {target,done,perSession,pct,expectedPct:timeFrac*100,daysLeft,remaining:Math.max(0,target-done)};
 }

@@ -1,4 +1,4 @@
-const CACHE = 'mastergram-v32';
+const CACHE = 'mastergram-v33';
 const ASSETS = ['./manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
