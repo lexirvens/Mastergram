@@ -445,6 +445,14 @@ const I18N={
   toValidate:"pour valider ta semaine",weeksRow:"sem. d'affilée",
   doneN:"faites",remainN:"restantes",daysLeft:"Jours restants",elapsed:"Temps écoulé",
   showMore:"Voir plus",showLess:"Voir moins",
+  baseHint:"Base par semaine. Ajustable chaque semaine avec + et −.",
+  needRate:"Rythme nécessaire :",yourRate:"ta cible :",perWeekShort:"/sem",
+  rateShort:"À ce rythme tu termines avec un manque de",
+  rateOk:"Ta cible suffit pour atteindre ton objectif à temps.",
+  alignDate:"Reculer la fin au",alignRate:"Monter la cible à",
+  rateTitle:"Cible insuffisante",
+  rateBody1:"Ton objectif exige",rateBody2:"mais ta cible est",rateBody3:"À l'arrivée il te manquerait",
+  rateFix:"Ouvre les réglages pour reculer la date de fin ou monter la cible.",
   wAhead:"En avance sur ta courbe",wSlip:"Léger retard sur la courbe",wBehind:"En retard sur la courbe",
   wNoData:"Entre un poids de départ et un objectif",wNeed:"Il reste",wPerWeek:" par semaine",
   maxDay:"Maximum 2 séances par jour.",
@@ -542,6 +550,14 @@ const I18N={
   toValidate:"to complete your week",weeksRow:"weeks in a row",
   doneN:"done",remainN:"left",daysLeft:"Days left",elapsed:"Time elapsed",
   showMore:"Show more",showLess:"Show less",
+  baseHint:"Weekly base. Adjustable each week with + and −.",
+  needRate:"Required pace:",yourRate:"your target:",perWeekShort:"/wk",
+  rateShort:"At this pace you finish short by",
+  rateOk:"Your target is enough to reach the goal in time.",
+  alignDate:"Push the end to",alignRate:"Raise the target to",
+  rateTitle:"Target too low",
+  rateBody1:"Your goal requires",rateBody2:"but your target is",rateBody3:"At the end you would be short by",
+  rateFix:"Open settings to push the end date back or raise the target.",
   wAhead:"Ahead of your curve",wSlip:"Slightly behind the curve",wBehind:"Behind the curve",
   wNoData:"Set a starting weight and a goal",wNeed:"Still",wPerWeek:" per week",
   maxDay:"Maximum 2 sessions per day.",
@@ -653,7 +669,7 @@ function T(k){ return (I18N[LANG]&&I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18
 function setLang(l){ LANG=l; try{ localStorage.setItem('mg-lang',l); }catch(e){} try{ document.documentElement.lang=l; }catch(e){} render(); }
 function frNum(n,dec){ const v=Number(n).toFixed(dec); return LANG==='fr'?v.replace('.',','):v; }
 
-const APP_VERSION='v31';
+const APP_VERSION='v32';
 const STORE_KEY = 'tracker-state';
 
 
@@ -897,6 +913,11 @@ function renderFreq(o){
       <button class="log-btn" id="log">${escapeHtml(tAction(o))}</button>
       <div class="today-row"><span class="today-count">${T('today')} : <b>${todayCount}</b> ${todayCount===1?tItemS(o):tItemP(o)}</span><button class="undo" id="undo" ${o.sessions.length===0?'disabled':''}>${T('undo')}</button></div>
     </div>
+    ${(()=>{ const wk=(parseDate(o.endDate)-parseDate(o.startDate))/6048e5; if(wk<=0) return '';
+        const need=o.target/wk; const w=Number(o.weeklyTarget)||0;
+        if(w>=need-0.02) return '';
+        return `<div class="rulecard" style="margin-top:14px"><h4>${T('rateTitle')}</h4><div style="font-size:13px;line-height:1.55">${T('rateBody1')} <b>${fr(need,2)}</b>${T('perWeekShort')}, ${T('rateBody2')} <b>${fr(w,2)}</b>. ${T('rateBody3')} <b>${Math.round(o.target-w*wk)}</b> ${tItemP(o)}.</div><div class="foot">${T('rateFix')}</div></div>`;
+      })()}
     <button class="share-btn" id="catchup" style="margin-top:12px">${T('catchUp')}</button>
     <div class="subgoal">
       <div class="subgoal-top"><span class="subgoal-title">${T('thisWeek')}</span><span class="wk-ctrl"><button class="wk-step" id="wk-dec" aria-label="Diminuer l'objectif de la semaine">−</button><span class="subgoal-count num ${wkDone?'done':''}"><b>${cw}</b> / ${wt}</span><button class="wk-step" id="wk-inc" aria-label="Augmenter l'objectif de la semaine">+</button></span></div>
@@ -1103,7 +1124,7 @@ function openSettings(id){
       <div class="field"><label>${T('name')}</label><input id="s-name" type="text" value="${escapeAttr(tName(o))}"></div>
       <div class="row2"><div class="field"><label>${T('start')}</label><input id="s-start" type="date" value="${o.startDate}"></div><div class="field"><label>${T('end')}</label><input id="s-end" type="date" value="${o.endDate}"></div></div>
       <div class="field"><label>${T('totalTarget')}</label><input id="s-target" type="number" min="1" value="${o.target}"><div class="note" id="s-note"></div></div>
-      <div class="field"><label>${T('baseWeek')}</label><input id="s-weekly" type="number" min="0.5" max="14" step="0.5" value="${o.weeklyTarget}"><div class="note" id="s-wnote"></div></div>
+      <div class="field"><label>${T('baseWeek')}</label><input id="s-weekly" type="number" min="0.5" max="14" step="0.5" value="${o.weeklyTarget}"><div class="note" id="s-wnote"></div><div id="s-warn"></div></div>
       ${o.key==='read'?`<div class="field"><label>${T('pagesPerDay')}</label><input id="s-pages" type="number" min="1" value="${o.pagesPerDay||10}"><div class="note">${T('pagesHint')}</div></div>`:''}
       <div class="sheet-sep"></div>
       <div class="sheet-sub">${T('theme')}</div>
@@ -1154,11 +1175,27 @@ function openSettings(id){
 }
 function updNotes(){
   const t=Math.max(1,Number(document.getElementById('s-target').value)||1);
-  const s=document.getElementById('s-start').value,e=document.getElementById('s-end').value; let extra='';
-  if(s&&e){ const wk=(parseDate(e)-parseDate(s))/6048e5; if(wk>0) extra=(LANG==='en'?(' · about '+fr(t/wk,1)+' per week'):(' · environ '+fr(t/wk,1)+' par semaine')); }
-  document.getElementById('s-note').textContent=(LANG==='en'?('Each one will be worth '+fr(100/t,2)+' %'):('Chaque fois vaudra '+fr(100/t,2)+' %'))+extra;
-  const w=Math.max(1,Number(document.getElementById('s-weekly').value)||1);
-  document.getElementById('s-wnote').textContent=LANG==='en'?('Base of '+w+' per week. Adjust each week with + and − on the card.'):('Base de '+w+' par semaine. Tu peux ajuster chaque semaine avec + et − sur la carte.');
+  const sEl=document.getElementById('s-start'), eEl=document.getElementById('s-end');
+  const sv=sEl?sEl.value:'', ev=eEl?eEl.value:'';
+  let need=null;
+  if(sv&&ev){ const wk=(parseDate(ev)-parseDate(sv))/6048e5; if(wk>0) need=t/wk; }
+  document.getElementById('s-note').textContent=(LANG==='en'?('Each one will be worth '+fr(100/t,2)+' %'):('Chaque fois vaudra '+fr(100/t,2)+' %'));
+  const w=Math.max(0.5,Number(document.getElementById('s-weekly').value)||1);
+  const wn=document.getElementById('s-wnote');
+  const warn=document.getElementById('s-warn');
+  if(need==null){ wn.textContent=T('baseHint'); if(warn) warn.innerHTML=''; return; }
+  wn.textContent=T('needRate')+' '+fr(need,2)+T('perWeekShort')+' · '+T('yourRate')+' '+fr(w,2);
+  if(!warn) return;
+  if(w < need-0.02){
+    const miss=Math.round(t-w*((parseDate(ev)-parseDate(sv))/6048e5));
+    const newEnd=isoDate(new Date(parseDate(sv).getTime()+Math.round(t/w*7)*864e5));
+    warn.innerHTML=`<div class="note" style="color:var(--gold);margin-top:6px">${T('rateShort')} ${miss} ${tItemP(active())}.</div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="chip" id="s-fixdate">${T('alignDate')} ${fmtDate(parseDate(newEnd))}</button><button type="button" class="chip" id="s-fixrate">${T('alignRate')} ${fr(need,1)}</button></div>`;
+    const fd=document.getElementById('s-fixdate'); if(fd) fd.onclick=()=>{ eEl.value=newEnd; updNotes(); };
+    const fr2=document.getElementById('s-fixrate'); if(fr2) fr2.onclick=()=>{ document.getElementById('s-weekly').value=(Math.ceil(need*10)/10).toFixed(1); updNotes(); };
+  } else {
+    warn.innerHTML=`<div class="note" style="color:var(--grow);margin-top:6px">${T('rateOk')}</div>`;
+  }
 }
 function openAdd(){
   editId=null; newType='frequency'; const sheet=document.getElementById('sheet');
