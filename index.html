@@ -679,7 +679,7 @@ function T(k){ return (I18N[LANG]&&I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18
 function setLang(l){ LANG=l; try{ localStorage.setItem('mg-lang',l); }catch(e){} try{ document.documentElement.lang=l; }catch(e){} render(); }
 function frNum(n,dec){ const v=Number(n).toFixed(dec); return LANG==='fr'?v.replace('.',','):v; }
 
-const APP_VERSION='2.2';
+const APP_VERSION='2.3';
 const STORE_KEY = 'tracker-state';
 
 
@@ -766,7 +766,7 @@ function freqMetrics(o){
   const done=o.sessions.length; const perSession=100/target; const pct=done*perSession;
   const s=parseDate(o.startDate).getTime(), e=effEndDate(o).getTime(), now=Date.now();
   // les jours neutralises sortent de l'horloge : ils ne font pas monter l'attente
-  let nzPast=0; const nset=(typeof neutralSet==='function')?neutralSet(o):{};
+  let nzPast=0; const nset=activeNeutral(o);
   for(const k in nset){ const t=parseDate(k).getTime(); if(t>=s && t<=now) nzPast++; }
   const baseSpan=Math.max(1, parseDate(o.endDate).getTime()-s);   // duree d'origine
   const elapsedEff=Math.max(0,(now-s)-nzPast*864e5);              // temps reellement du
@@ -784,9 +784,12 @@ function wkTargetFor(o,monday){
   const CAP=(lo===hi)?lo:(hi+1);                                   // plafond de rattrapage
   // total qu'il faudrait avoir cumule a la FIN de cette semaine
   // chaque jour neutralise avant cette semaine retire 1/7 de semaine d'attente
-  let nzBefore=0; const nset=neutralSet(o);
-  for(const k in nset){ const d=parseDate(k); if(d>=start && d<mon) nzBefore++; }
-  const effWeeks=Math.max(0,(idx+1)-(nzBefore/7));
+  const startDay=parseDate(o.startDate);
+  let nzBefore=0; const nset=activeNeutral(o);
+  for(const k in nset){ const d=parseDate(k); if(d>=startDay && d<mon) nzBefore++; }
+  const weekEnd=new Date(mon); weekEnd.setDate(weekEnd.getDate()+7);
+  const daysIn=Math.max(0,Math.round((weekEnd-startDay)/864e5));
+  const effWeeks=Math.max(0,(daysIn-nzBefore)/7);
   const needCum=Math.round(avg*effWeeks);
   // total reellement fait AVANT cette semaine
   let doneBefore=0;
@@ -900,6 +903,7 @@ function subline(o){
 }
 
 function renderFreq(o){
+  const RO=o; o=virtualObj(o); const VIEW=showNeutral?RO:o;
   const m=freqMetrics(o);
   const R=108, CIRC=2*Math.PI*R; const shown=Math.min(m.pct,100); const off=CIRC*(1-shown/100);
   const ringColor=m.pct>=100?'var(--gold)':'var(--grow)';
@@ -937,12 +941,12 @@ function renderFreq(o){
         return `<div class="rulecard" style="margin-top:14px"><h4>${T('rateTitle')}</h4><div style="font-size:13px;line-height:1.55">${T('rateBody1')} <b>${fr(need,2)}</b>${T('perWeekShort')}, ${T('rateBody2')} <b>${fr(w,2)}</b>. ${T('rateBody3')} <b>${Math.round(o.target-w*wk)}</b> ${tItemP(o)}.</div><div class="foot">${T('rateFix')}</div></div>`;
       })()}
     <button class="share-btn" id="catchup" style="margin-top:12px">${T('catchUp')}</button>
-    ${(()=>{ const tk=isoDate(logicalNow()); const nzT=isNeutral(o,tk); const tc=o.sessions.filter(x=>dayKey(x.ts)===tk).length;
+    ${(()=>{ const tk=isoDate(logicalNow()); const nzT=isNeutral(RO,tk); const tc=o.sessions.filter(x=>dayKey(x.ts)===tk).length;
         if(tc>0&&!nzT) return ''; return `<button class="nz-today" id="nz-today">${nzT?T('nzTodayUndo'):T('nzToday')}</button>`; })()}
     <div class="subgoal">
       <div class="subgoal-top"><span class="subgoal-title">${T('thisWeek')}</span><span class="wk-ctrl"><button class="wk-step" id="wk-dec" aria-label="Diminuer l'objectif de la semaine">−</button><span class="subgoal-count num ${wkDone?'done':''}"><b>${cw}</b> / ${wt}</span><button class="wk-step" id="wk-inc" aria-label="Augmenter l'objectif de la semaine">+</button></span></div>
       <div class="mini-bar"><div class="mini-fill" style="width:${wkPct}%; background:${wkDone?'var(--gold)':'var(--grow)'}"></div></div>
-      ${(()=>{const nz=neutralInWeek(o,mondayOf(logicalNow())); return nz>0?`<div class="note" style="margin-top:8px">${T('neutralWeek')} ${nz}</div>`:'';})()}
+      ${(()=>{const nz=neutralInWeek(RO,mondayOf(logicalNow())); return nz>0?`<div class="note" style="margin-top:8px">${T('neutralWeek')} ${nz}</div>`:'';})()}
       ${(()=>{const avg=Number(o.weeklyTarget)||0; return (avg>0&&wt>Math.ceil(avg))?`<div class="note" style="margin-top:8px;color:var(--gold)">${T('catchUpWeek')}</div>`:(avg>0&&wt<Math.ceil(avg)?`<div class="note" style="margin-top:8px">${T('lightWeek')}</div>`:'');})()}
       <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak stk-${((streak-1)%7)+1}">${streak} ${(LANG==='en'&&streak===1)?'week in a row':T('weeksRow')}</span>`:'<span></span>'}</div>
     </div>
@@ -953,13 +957,13 @@ function renderFreq(o){
       <div class="stat"><div class="stat-v num">${m.daysLeft}</div><div class="stat-l">${T('daysLeft')}</div></div>
       <div class="stat"><div class="stat-v num">${m.expectedPct.toFixed(0)}<small style="font-size:15px;color:var(--muted)">%</small></div><div class="stat-l">${T('elapsed')}</div></div>
     </div>
-    <div class="cal"><h2>${T('calendar')}</h2>${heatmap(o)}</div>
+    <div class="cal"><h2>${T('calendar')}</h2>${heatmap(VIEW)}</div>
     <div class="analytics">
       <div class="an-head"><h2>${T('performance')}</h2><div class="toggle"><button id="tg-week" class="${view==='week'?'active':''}">${T('week')}</button><button id="tg-month" class="${view==='month'?'active':''}">${T('month')}</button></div></div>
-      <div class="chart-card">${freqChart(o)}${view==='week'?`<div class="chart-legend"><span class="dash"></span> ${T('weeklyGoalLegend')}</div>`:''}</div>
-      ${freqSummary(o)}
+      <div class="chart-card">${freqChart(VIEW)}${view==='week'?`<div class="chart-legend"><span class="dash"></span> ${T('weeklyGoalLegend')}</div>`:''}</div>
+      ${freqSummary(VIEW)}
     </div>
-    <div class="hist"><h2>${T('history')}</h2>${freqHistory(o)}</div>
+    <div class="hist"><h2>${T('history')}</h2>${freqHistory(RO)}</div>
   `;
 }
 
@@ -1031,7 +1035,7 @@ function heatColor(c,opt){
   return '#1f7a4c';             // fonce : deux fois
 }
 function nzToggleHtml(o){
-  const n=neutralCount(o); if(!n) return '';
+  const n=(o._nzCount!=null)?o._nzCount:neutralCount(o); if(!n) return '';
   return `<button class="nz-toggle" data-nztoggle="1">${showNeutral?T('nzHide'):(T('nzShow')+' ('+n+')')}</button>`;
 }
 function heatmapCompact(o){
@@ -1053,7 +1057,6 @@ function heatmapCompact(o){
     <div class="note" style="margin-top:8px">${days.length} ${T('nzCompactNote')}</div>`;
 }
 function heatmap(o){
-  if(!showNeutral && neutralCount(o)>0) return heatmapCompact(o);
   const startReal=parseDate(o.startDate);
   const today=logicalNow(); today.setHours(0,0,0,0);
   const lastMon=mondayOf(today);
@@ -1070,13 +1073,14 @@ function heatmap(o){
     for(let d=0;d<7;d++){ const day=new Date(colMon); day.setDate(day.getDate()+d);
       const ik=isoDate(day); const inRange=day>=startReal&&day<=today; const c=map[ik]||0; const nz=isNeutral(o,ik);
       const isToday=day.getTime()===today.getTime();
-      cells+= inRange ? `<div class="cal-cell${isToday?' is-today':''}" title="${ik} : ${nz?T('neutralShort'):c}" style="background:${heatColor(c,{neutral:nz,today:isToday})}"></div>` : `<div class="cal-cell" style="visibility:hidden"></div>`;
+      const rk=(o._realOf&&o._realOf[ik])||ik;
+      cells+= inRange ? `<div class="cal-cell${isToday?' is-today':''}" title="${rk} : ${nz?T('neutralShort'):c}" style="background:${heatColor(c,{neutral:nz,today:isToday})}"></div>` : `<div class="cal-cell" style="visibility:hidden"></div>`;
     }
     cols+=`<div class="cal-col">${cells}</div>`;
   }
   const lbls=T('dayInit').map(x=>`<div class="cal-day-lbl">${x}</div>`).join('');
   return `<div class="cal-wrap"><div class="cal-days">${lbls}</div><div class="cal-scroll" id="cal-scroll"><div class="cal-grid"><div class="cal-months">${months}</div><div class="cal-cols">${cols}</div></div></div></div>
-    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px;flex-wrap:wrap"><span style="margin-right:auto">${nzToggleHtml(o)}</span><span class="cal-cell" style="background:#ffffff"></span> 0 <span class="cal-cell" style="background:#8fe0b4;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#1f7a4c;margin-left:8px"></span> 2 <span class="cal-cell" style="background:#5aa9e6;margin-left:8px"></span> ${T('neutralShort')}</div>`;
+    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px;flex-wrap:wrap"><span style="margin-right:auto">${nzToggleHtml(o)}</span><span class="cal-cell" style="background:#ffffff"></span> 0 <span class="cal-cell" style="background:#8fe0b4;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#1f7a4c;margin-left:8px"></span> 2 ${o._virtual?'':`<span class="cal-cell" style="background:#5aa9e6;margin-left:8px"></span> ${T('neutralShort')}`}</div>`;
 }
 function freqHistory(o){
   if(o.sessions.length===0) return `<div class="empty">${T('noneYet')} ${tItemS(o)} ${T('forNow')}<br>${T('firstWorth')} <b>${fr(100/Math.max(1,o.target),2)} %</b>.</div>`;
@@ -1473,15 +1477,15 @@ async function loadGroup(){
 
 async function pushProgress(){
   if(!sb||!me||!myGroup) return;
-  const o=state.objectives.find(x=>x.type==='frequency'); if(!o) return;
-  const m=freqMetrics(o);
+  const oR=state.objectives.find(x=>x.type==='frequency'); if(!oR) return;
+  const o=virtualObj(oR); const m=freqMetrics(o);
   const freqs=state.objectives.filter(x=>x.type==='frequency');
   const detail={objectives:freqs.map(f=>({id:f.id,key:f.key||null,name:f.name,renamed:!!f.renamed,itemKey:f.itemKey||'session',actionKey:f.actionKey||'generic',startDate:f.startDate,endDate:f.endDate,target:f.target,weeklyTarget:f.weeklyTarget,weekOverrides:f.weekOverrides||{},neutral:f.neutral||{},sessions:f.sessions||[],reached:f.reached||[]}))};
   const wt=Number(wkTargetFor(o,mondayOf(logicalNow())))||1;
   const row={ user_id:me.id, group_id:myGroup.id, goal_name:tName(o), pct:Number(m.pct.toFixed(2)),
     done:Math.round(m.done), target:Math.round(m.target),
     week_count:Math.round(curWeek(o)), week_target:Math.round(wt), week_target_exact:Number(wt),
-    streak:Math.round(weekStreak(o)), neutral_days:neutralCount(o), detail:detail, updated_at:new Date().toISOString() };
+    streak:Math.round(weekStreak(o)), neutral_days:neutralCount(oR), detail:detail, updated_at:new Date().toISOString() };
   try{
     const {error}=await sb.from('progress').upsert(row,{onConflict:'user_id,group_id'});
     if(error) throw error;
@@ -1612,10 +1616,39 @@ async function neutralizeToday(){
   o.neutral[iso]=1; await save(); render(); pushProgress(); scheduleSync(); showToast(T('neutralOk'));
 }
 function neutralSet(o){ return (o.neutral&&typeof o.neutral==='object')?o.neutral:{}; }
-function neutralCount(o){ return Object.keys(neutralSet(o)).length; }
+function activeNeutral(o){
+  const n=neutralSet(o); const keys=Object.keys(n); if(!keys.length) return {};
+  const trained={}; (o.sessions||[]).forEach(x=>{ trained[dayKey(x.ts)]=1; });
+  const out={}; keys.forEach(k=>{ if(!trained[k]) out[k]=1; }); return out;
+}
+// Vue decalee : les jours neutralises sont retires, les jours precedents glissent
+// vers aujourd'hui pour combler le vide, et le debut du defi recule d'autant.
+function virtualObj(o){
+  if(!o||o.type!=='frequency'||o._virtual) return o;
+  const nz=activeNeutral(o); if(!Object.keys(nz).length) return o;
+  const start=parseDate(o.startDate); const today=logicalNow(); today.setHours(0,0,0,0);
+  const todayK=isoDate(today);
+  const shift={}, realOf={}; let slot=0, firstVirtual=null;
+  for(let d=new Date(today); d>=start; d.setDate(d.getDate()-1)){
+    const k=isoDate(d);
+    if(k!==todayK){ if(nz[k]) continue; slot++; }
+    const v=new Date(today); v.setDate(v.getDate()-slot);
+    shift[k]=Math.round((v-d)/864e5); realOf[isoDate(v)]=k; firstVirtual=v;
+  }
+  const sh0=shift[isoDate(start)]!=null?shift[isoDate(start)]:0;
+  const vStart=firstVirtual||new Date(start);
+  const vEnd=parseDate(o.endDate); vEnd.setDate(vEnd.getDate()+Math.round((vStart-start)/864e5));
+  const sessions=(o.sessions||[]).map(x=>{ const k=dayKey(x.ts); const n=shift[k]||0; if(!n) return x;
+    const t=new Date(x.ts); t.setDate(t.getDate()+n); return Object.assign({},x,{ts:t.toISOString()}); });
+  const keepNz={}; Object.keys(nz).forEach(k=>{ if(parseDate(k)>=today) keepNz[k]=1; });
+  const curMon=mondayOf(today); const ov={};
+  Object.keys(o.weekOverrides||{}).forEach(k=>{ if(parseDate(k)>=curMon) ov[k]=o.weekOverrides[k]; });
+  return Object.assign({},o,{_virtual:true,_realOf:realOf,_nzCount:neutralCount(o),startDate:isoDate(vStart),endDate:isoDate(vEnd),sessions,neutral:keepNz,weekOverrides:ov});
+}
+function neutralCount(o){ return Object.keys(activeNeutral(o)).length; }
 function isNeutral(o,iso){ return !!neutralSet(o)[iso]; }
 function neutralInWeek(o,monday){
-  const m=mondayOf(monday); const n=neutralSet(o); let c=0;
+  const m=mondayOf(monday); const n=activeNeutral(o); let c=0;
   for(let i=0;i<7;i++){ const d=new Date(m); d.setDate(d.getDate()+i); if(n[isoDate(d)]) c++; }
   return c;
 }
@@ -1971,13 +2004,14 @@ function renderMateDetail(mt){
   if(!objs.length){ html+=`<div class="empty">${LANG==='en'?"This friend has not synced their details yet. They need to open the updated app.":"Cet ami n'a pas encore synchronisé ses détails. Il doit ouvrir l'app à jour."}</div>`; return html; }
   for(const o of objs){
     o.sessions=o.sessions||[]; o.weekOverrides=o.weekOverrides||{}; o.reached=o.reached||[];
-    const m=freqMetrics(o); const wt=wkTargetFor(o,mondayOf(logicalNow())); const cw=curWeek(o); const st=weekStreak(o);
+    const RO=o; const V=virtualObj(o); const VIEW=showNeutral?RO:V;
+    const m=freqMetrics(V); const wt=wkTargetFor(V,mondayOf(logicalNow())); const cw=curWeek(V); const st=weekStreak(V);
     html+=`<div class="mate" style="margin-bottom:14px">
       <div class="mate-top"><div class="mate-name">${escapeHtml(tName(o))}</div><div class="mate-pct" style="color:var(--grow)">${fr(m.pct,1)}<span style="font-size:13px;color:var(--muted)">%</span></div></div>
       <div class="mate-bar"><div class="mate-fill" style="width:${Math.min(100,m.pct).toFixed(1)}%;background:var(--grow)"></div></div>
       <div class="mate-foot"><span>${m.done} / ${m.target} ${tItemP(o)}</span><span>${T('weekLbl')} : ${cw}/${wt}${st>0?(' · '+st+' '+(LANG==='en'?'wks':'sem.')):''}</span></div>
-      <div style="margin-top:14px">${heatmap(o)}</div>
-      <div style="margin-top:8px">${mateHistory(o)}</div>
+      <div style="margin-top:14px">${heatmap(VIEW)}</div>
+      <div style="margin-top:8px">${mateHistory(RO)}</div>
     </div>`;
   }
   return html;
