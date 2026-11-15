@@ -154,7 +154,7 @@
   .avg-gauge { position:relative; height:12px; background:rgba(255,255,255,.06); border-radius:99px; margin:14px 0 8px; box-shadow:inset 0 1px 2px rgba(0,0,0,.3); }
   .avg-fill { position:absolute; left:0; top:0; bottom:0; border-radius:99px; transition:width .8s cubic-bezier(.22,1,.36,1), background .4s; }
   .avg-target { position:absolute; top:-5px; bottom:-5px; width:2.5px; background:var(--text); border-radius:2px; box-shadow:0 0 8px rgba(255,255,255,.5); }
-  .avg-target::after { content:"4,5 visé"; position:absolute; bottom:-18px; left:50%; transform:translateX(-50%); font-size:9.5px; color:var(--muted); white-space:nowrap; }
+  .avg-target::after { content:attr(data-lbl); position:absolute; bottom:-18px; left:50%; transform:translateX(-50%); font-size:9.5px; color:var(--muted); white-space:nowrap; }
   .avg-msg { font-size:12.5px; line-height:1.45; margin-top:22px; }
   .avg-msg b { font-weight:600; }
 
@@ -411,6 +411,10 @@
   .sugg button { letter-spacing:.01em; text-decoration:none; border-bottom:1px solid var(--line); }
   .miss-day.nz { opacity:.72; }
   .cal-cell.is-today { box-shadow:0 0 0 1.5px var(--gold); }
+  .nz-toggle { background:none; border:none; padding:4px 0; color:var(--soft); font-size:11.5px; letter-spacing:.01em; cursor:pointer; border-bottom:1px solid var(--line); }
+  .nz-toggle:hover { color:var(--text); }
+  .nz-today { display:block; width:100%; margin-top:10px; background:none; border:none; color:var(--soft); font-size:12.5px; padding:8px; cursor:pointer; }
+  .nz-today:hover { color:#5aa9e6; }
   @media (prefers-reduced-motion:reduce) { *, .overlay.open, .sheet { animation:none !important; transition:none !important; } }
 
   </style>
@@ -445,6 +449,9 @@ const I18N={
   toValidate:"pour valider ta semaine",weeksRow:"sem. d'affilée",
   doneN:"faites",remainN:"restantes",daysLeft:"Jours restants",elapsed:"Temps écoulé",
   showMore:"Voir plus",showLess:"Voir moins",
+  nzShow:"Voir les jours neutralisés",nzHide:"Masquer les jours neutralisés",dayN:"Jour",
+  nzCompactNote:"jours de défi, les jours neutralisés sont retirés.",
+  nzToday:"Malade aujourd'hui ? Neutraliser ce jour",nzTodayUndo:"Aujourd'hui est neutralisé · Annuler",
   baseHint:"Base par semaine. Ajustable chaque semaine avec + et −.",
   needRate:"Rythme nécessaire :",yourRate:"ta cible :",perWeekShort:"/sem",
   rateShort:"À ce rythme tu termines avec un manque de",
@@ -550,6 +557,9 @@ const I18N={
   toValidate:"to complete your week",weeksRow:"weeks in a row",
   doneN:"done",remainN:"left",daysLeft:"Days left",elapsed:"Time elapsed",
   showMore:"Show more",showLess:"Show less",
+  nzShow:"Show neutralised days",nzHide:"Hide neutralised days",dayN:"Day",
+  nzCompactNote:"challenge days, neutralised days are removed.",
+  nzToday:"Sick today? Neutralise this day",nzTodayUndo:"Today is neutralised · Undo",
   baseHint:"Weekly base. Adjustable each week with + and −.",
   needRate:"Required pace:",yourRate:"your target:",perWeekShort:"/wk",
   rateShort:"At this pace you finish short by",
@@ -669,7 +679,7 @@ function T(k){ return (I18N[LANG]&&I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18
 function setLang(l){ LANG=l; try{ localStorage.setItem('mg-lang',l); }catch(e){} try{ document.documentElement.lang=l; }catch(e){} render(); }
 function frNum(n,dec){ const v=Number(n).toFixed(dec); return LANG==='fr'?v.replace('.',','):v; }
 
-const APP_VERSION='v33';
+const APP_VERSION='2.1';
 const STORE_KEY = 'tracker-state';
 
 
@@ -924,12 +934,14 @@ function renderFreq(o){
         return `<div class="rulecard" style="margin-top:14px"><h4>${T('rateTitle')}</h4><div style="font-size:13px;line-height:1.55">${T('rateBody1')} <b>${fr(need,2)}</b>${T('perWeekShort')}, ${T('rateBody2')} <b>${fr(w,2)}</b>. ${T('rateBody3')} <b>${Math.round(o.target-w*wk)}</b> ${tItemP(o)}.</div><div class="foot">${T('rateFix')}</div></div>`;
       })()}
     <button class="share-btn" id="catchup" style="margin-top:12px">${T('catchUp')}</button>
+    ${(()=>{ const tk=isoDate(new Date()); const nzT=isNeutral(o,tk); const tc=o.sessions.filter(x=>dayKey(x.ts)===tk).length;
+        if(tc>0&&!nzT) return ''; return `<button class="nz-today" id="nz-today">${nzT?T('nzTodayUndo'):T('nzToday')}</button>`; })()}
     <div class="subgoal">
       <div class="subgoal-top"><span class="subgoal-title">${T('thisWeek')}</span><span class="wk-ctrl"><button class="wk-step" id="wk-dec" aria-label="Diminuer l'objectif de la semaine">−</button><span class="subgoal-count num ${wkDone?'done':''}"><b>${cw}</b> / ${wt}</span><button class="wk-step" id="wk-inc" aria-label="Augmenter l'objectif de la semaine">+</button></span></div>
       <div class="mini-bar"><div class="mini-fill" style="width:${wkPct}%; background:${wkDone?'var(--gold)':'var(--grow)'}"></div></div>
       ${(()=>{const nz=neutralInWeek(o,mondayOf(new Date())); return nz>0?`<div class="note" style="margin-top:8px">${T('neutralWeek')} ${nz}</div>`:'';})()}
       ${(()=>{const avg=Number(o.weeklyTarget)||0; return (avg>0&&wt>Math.ceil(avg))?`<div class="note" style="margin-top:8px;color:var(--gold)">${T('catchUpWeek')}</div>`:(avg>0&&wt<Math.ceil(avg)?`<div class="note" style="margin-top:8px">${T('lightWeek')}</div>`:'');})()}
-      <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak stk-${((streak-1)%7)+1}">${streak} ${T('weeksRow')}</span>`:'<span></span>'}</div>
+      <div class="subgoal-foot"><span>${wkDone?T('subDone'):(wt-cw)+' '+((wt-cw)>1?tItemP(o):tItemS(o))+' '+T('toValidate')}</span>${streak>0?`<span class="streak stk-${((streak-1)%7)+1}">${streak} ${(LANG==='en'&&streak===1)?'week in a row':T('weeksRow')}</span>`:'<span></span>'}</div>
     </div>
     ${avgGauge(o)}
     <div class="stats">
@@ -953,7 +965,7 @@ function avgGauge(o){
   const all=weekBuckets(o,80);
   const startDay=parseDate(o.startDate);
   // on ne compte que les semaines ENTIERES commencees apres le depart
-  const past=all.filter(b=>b.mon>=startDay && b.mon<mondayOf(new Date()) && neutralInWeek(o,b.mon)<7);
+  const past=all.filter(b=>b.mon>=startDay && b.mon<mondayOf(new Date()) && neutralInWeek(o,b.mon)<4);
   const recent=past.slice(-8);
   if(recent.length===0){
     return `<div class="avg stat"><div class="avg-top"><span class="avg-title">${T('avgTitle')}</span><span class="avg-val">—</span></div>
@@ -975,7 +987,7 @@ function avgGauge(o){
   if(cwCount>=cwTarget && gap<0){ color='var(--grow)'; msg=T('avgOnTrackNow'); }
   return `<div class="avg stat">
     <div class="avg-top"><span class="avg-title">${T('avgTitle')}</span><span class="avg-val" style="color:${color}">${fr(avg,1)} <span>/ ${fr(need,1)}</span></span></div>
-    <div class="avg-gauge"><div class="avg-fill" style="width:${pos.toFixed(1)}%; background:${color}"></div><div class="avg-target" style="left:${tpos.toFixed(1)}%"></div></div>
+    <div class="avg-gauge"><div class="avg-fill" style="width:${pos.toFixed(1)}%; background:${color}"></div><div class="avg-target" data-lbl="${fr(need,1)} ${T('avgTarget')}" style="left:${tpos.toFixed(1)}%"></div></div>
     <div class="avg-msg" style="color:${color==='var(--grow)'?'var(--muted)':color}">${msg}</div>
     <div class="avg-msg" style="color:var(--soft);margin-top:6px;font-size:11.5px">${T('lastWeeks')} ${recent.length} ${recent.length>1?T('weekPlur'):T('weekSing')} · ${T('thisWeekSoFar')} ${cwCount}/${cwTarget} · ${T('withThisWeek')} ${fr(avgWith,1)}</div>
   </div>`;
@@ -985,7 +997,7 @@ const BAR_COLS={0:'#6a727b',1:'#b9e8cf',2:'#8fe0b4',3:'#5fcf94',4:'#35b877',5:'#
 function barColor(c){ if(c>=7) return '#0f3d2a'; return BAR_COLS[c]||'#6a727b'; }
 function freqChart(o){
   const week = view==='week';
-  const buckets = week ? weekBuckets(o,10) : monthBuckets(o,6);
+  const buckets = week ? (showNeutral?weekBuckets(o,10):weekBuckets(o,16).filter(b=>neutralInWeek(o,b.mon)<7).slice(-10)) : monthBuckets(o,6);
   const thisMon = mondayOf(new Date());
   // A tick is drawn only for weeks the user actually set a target for (past or current). Nothing is predicted.
   const targets = week ? buckets.map(b=>{ const k=isoDate(b.mon); const set=(o.weekOverrides&&o.weekOverrides[k]!=null)?o.weekOverrides[k]:null;
@@ -993,7 +1005,7 @@ function freqChart(o){
   const W=320,H=150,padT=12,padB=24,plotH=H-padT-padB,n=buckets.length,gap=7,barW=(W-gap*(n+1))/n;
   const maxV=Math.max(1,...targets.filter(x=>x!=null),...buckets.map(b=>b.count));
   let bars='',ticks='';
-  buckets.forEach((b,i)=>{ const x=gap+i*(barW+gap); const h=(b.count/maxV)*plotH; const y=padT+plotH-h; const cur=i===n-1; const col=cur?'var(--gold)':barColor(b.count);
+  buckets.forEach((b,i)=>{ const x=gap+i*(barW+gap); const h=(b.count/maxV)*plotH; const y=padT+plotH-h; const cur=week?(b.mon.getTime()===thisMon.getTime()):(i===n-1); const col=cur?'var(--gold)':barColor(b.count);
     bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" rx="4" fill="${col}" ${b.count===0?'opacity="0.25"':''}/>`;
     if(b.count>0) bars+=`<text x="${(x+barW/2).toFixed(1)}" y="${(y-5).toFixed(1)}" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="11" fill="var(--text)">${b.count}</text>`;
     bars+=`<text x="${(x+barW/2).toFixed(1)}" y="${(H-8).toFixed(1)}" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" fill="var(--muted)">${b.label}</text>`;
@@ -1015,7 +1027,30 @@ function heatColor(c,opt){
   if(c===1) return '#8fe0b4';   // pale : une fois
   return '#1f7a4c';             // fonce : deux fois
 }
+function nzToggleHtml(o){
+  const n=neutralCount(o); if(!n) return '';
+  return `<button class="nz-toggle" data-nztoggle="1">${showNeutral?T('nzHide'):(T('nzShow')+' ('+n+')')}</button>`;
+}
+function heatmapCompact(o){
+  const startReal=parseDate(o.startDate);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const map={}; o.sessions.forEach(s=>{ const k=dayKey(s.ts); map[k]=(map[k]||0)+1; });
+  const days=[]; for(let d=new Date(startReal); d<=today; d.setDate(d.getDate()+1)){ if(!isNeutral(o,isoDate(d))) days.push(new Date(d)); }
+  let cols='',months='',prevM=-1;
+  for(let i=0;i<days.length;i+=7){
+    const chunk=days.slice(i,i+7); const m=chunk[0].getMonth(); let ml=''; if(m!==prevM){ ml=MOISg()[m].replace('.',''); prevM=m; }
+    months+=`<div class="cal-month">${ml}</div>`;
+    let cells='';
+    chunk.forEach((day,j)=>{ const ik=isoDate(day); const c=map[ik]||0; const isToday=day.getTime()===today.getTime();
+      cells+=`<div class="cal-cell${isToday?' is-today':''}" title="${T('dayN')} ${i+j+1} · ${ik} : ${c}" style="background:${heatColor(c,{today:isToday})}"></div>`; });
+    cols+=`<div class="cal-col">${cells}</div>`;
+  }
+  return `<div class="cal-wrap"><div class="cal-scroll" id="cal-scroll"><div class="cal-grid"><div class="cal-months">${months}</div><div class="cal-cols">${cols}</div></div></div></div>
+    <div class="chart-legend" style="justify-content:space-between;gap:4px;margin-top:12px;flex-wrap:wrap"><span>${nzToggleHtml(o)}</span><span style="display:inline-flex;align-items:center;gap:4px"><span class="cal-cell" style="background:#ffffff"></span> 0 <span class="cal-cell" style="background:#8fe0b4;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#1f7a4c;margin-left:8px"></span> 2</span></div>
+    <div class="note" style="margin-top:8px">${days.length} ${T('nzCompactNote')}</div>`;
+}
 function heatmap(o){
+  if(!showNeutral && neutralCount(o)>0) return heatmapCompact(o);
   const startReal=parseDate(o.startDate);
   const today=new Date(); today.setHours(0,0,0,0);
   const lastMon=mondayOf(today);
@@ -1038,7 +1073,7 @@ function heatmap(o){
   }
   const lbls=T('dayInit').map(x=>`<div class="cal-day-lbl">${x}</div>`).join('');
   return `<div class="cal-wrap"><div class="cal-days">${lbls}</div><div class="cal-scroll" id="cal-scroll"><div class="cal-grid"><div class="cal-months">${months}</div><div class="cal-cols">${cols}</div></div></div></div>
-    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px"><span class="cal-cell" style="background:#ffffff"></span> 0 <span class="cal-cell" style="background:#8fe0b4;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#1f7a4c;margin-left:8px"></span> 2 <span class="cal-cell" style="background:#5aa9e6;margin-left:8px"></span> ${T('neutralShort')}</div>`;
+    <div class="chart-legend" style="justify-content:flex-end;gap:4px;margin-top:12px;flex-wrap:wrap"><span style="margin-right:auto">${nzToggleHtml(o)}</span><span class="cal-cell" style="background:#ffffff"></span> 0 <span class="cal-cell" style="background:#8fe0b4;margin-left:8px"></span> 1 <span class="cal-cell" style="background:#1f7a4c;margin-left:8px"></span> 2 <span class="cal-cell" style="background:#5aa9e6;margin-left:8px"></span> ${T('neutralShort')}</div>`;
 }
 function freqHistory(o){
   if(o.sessions.length===0) return `<div class="empty">${T('noneYet')} ${tItemS(o)} ${T('forNow')}<br>${T('firstWorth')} <b>${fr(100/Math.max(1,o.target),2)} %</b>.</div>`;
@@ -1348,6 +1383,8 @@ function wire(){
   }
   const sh=document.getElementById('share'); if(sh) sh.onclick=shareSummary;
   const cu=document.getElementById('catchup'); if(cu) cu.onclick=openCatchup;
+  const nzt=document.getElementById('nz-today'); if(nzt) nzt.onclick=neutralizeToday;
+  document.querySelectorAll('[data-nztoggle]').forEach(b=>{ b.onclick=()=>setShowNeutral(!showNeutral); });
   const hm=document.getElementById('hist-more'); if(hm) hm.onclick=()=>{ histShown+=HIST_STEP; render(); };
   const hl=document.getElementById('hist-less'); if(hl) hl.onclick=()=>{ histShown=HIST_STEP; render(); };
   const ug=document.getElementById('upd-go'); if(ug) ug.onclick=()=>applyUpdate(ug);
@@ -1561,6 +1598,16 @@ let themeTimer=setInterval(()=>{ if(THEME==='auto'){ const want=nightNow()?'dark
 
 /* ---- Jours neutralises (maladie, force majeure) ---- */
 const MAX_NEUTRAL=21;
+let showNeutral=false; try{ showNeutral=localStorage.getItem('mg-shownz')==='1'; }catch(e){}
+function setShowNeutral(v){ showNeutral=!!v; try{ localStorage.setItem('mg-shownz',v?'1':'0'); }catch(e){} render(); }
+async function neutralizeToday(){
+  const o=active(); if(o.type!=='frequency') return;
+  const iso=isoDate(new Date()); o.neutral=neutralSet(o);
+  if(o.neutral[iso]){ delete o.neutral[iso]; await save(); render(); pushProgress(); scheduleSync(); return; }
+  if(neutralCount(o)>=MAX_NEUTRAL){ showToast(T('neutralMax')); return; }
+  if(!confirm(T('neutralAsk'))) return;
+  o.neutral[iso]=1; await save(); render(); pushProgress(); scheduleSync(); showToast(T('neutralOk'));
+}
 function neutralSet(o){ return (o.neutral&&typeof o.neutral==='object')?o.neutral:{}; }
 function neutralCount(o){ return Object.keys(neutralSet(o)).length; }
 function isNeutral(o,iso){ return !!neutralSet(o)[iso]; }
